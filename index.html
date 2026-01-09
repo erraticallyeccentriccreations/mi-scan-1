@@ -71,7 +71,7 @@ button {
 
 <button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
 <button id="clear-btn" onclick="clearInventory()">🧹 Clear Inventory</button>
-<button id="view-btn" onclick="viewInventory()">📋 View Inventory</button>
+<button id="view-btn" onclick="viewInventory()">📋 View Inventoryy</button>
 
 <div id="scanner-container" style="display:none;">
     <div id="reader"></div>
@@ -133,4 +133,5 @@ function onScanSuccess(code) {
 function clearInventory() {
     if (!confirm("Clear entire inventory?")) return;
     fetch(`${SCRIPT_URL}?action=clear`, { mode: "no-cors" })
+
 
