@@ -1,190 +1,135 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Filament V20</title>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filament Scanner</title>
 
-    <style>
-        body { 
-            background-color: #000; 
-            color: #fff; 
-            font-family: sans-serif; 
-            text-align: center; 
-            margin: 0; 
-            padding: 10px; 
-        }
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
-        /* Lift scanner UI higher */
-        #scanner-container {
-            margin-top: -80px;
-        }
+<style>
+body {
+    background: #000;
+    color: #fff;
+    font-family: sans-serif;
+    text-align: center;
+    margin: 0;
+    padding: 10px;
+}
 
-        #reader { 
-            width: 100%; 
-            border: 2px solid #333; 
-            background: #000; 
-            min-height: 250px; 
-            margin-top: -60px;
-        }
+#scanner-container {
+    margin-top: -80px;
+}
 
-        #status { 
-            margin-top: 15px; 
-            font-size: 1.2rem; 
-            font-weight: bold; 
-            min-height: 40px; 
-        }
+#reader {
+    width: 100%;
+    min-height: 250px;
+    margin-top: -60px;
+    border: 2px solid #333;
+}
 
-        .success { color: #0f0; }
-        .idle { color: #888; }
+#status {
+    margin-top: 15px;
+    font-size: 1.3rem;
+    min-height: 40px;
+}
 
-        .error { 
-            color: #f00; 
-            display: none; 
-            margin-top: 20px; 
-            border: 1px solid red; 
-            padding: 10px;
-        }
+.success { color: #0f0; }
+.idle { color: #888; }
 
-        #start-btn { 
-            padding: 20px 40px; 
-            font-size: 1.3rem; 
-            background: #007bff; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            margin-top: 20vh; 
-            cursor: pointer; 
-            width: 90%;
-            max-width: 320px;
-        }
+button {
+    width: 90%;
+    max-width: 320px;
+    padding: 16px;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+}
 
-        #clear-btn {
-            padding: 14px 30px;
-            font-size: 1rem;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            margin-top: 15px;
-            cursor: pointer;
-            width: 90%;
-            max-width: 320px;
-        }
-    </style>
+#start-btn {
+    background: #007bff;
+    color: white;
+    margin-top: 20vh;
+}
+
+#clear-btn {
+    background: #dc3545;
+    color: white;
+    margin-top: 12px;
+}
+
+#view-btn {
+    background: #28a745;
+    color: white;
+    margin-top: 12px;
+}
+</style>
 </head>
+
 <body>
 
-    <button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
+<button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
+<button id="clear-btn" onclick="clearInventory()">🧹 Clear Inventory</button>
+<button id="view-btn" onclick="viewInventory()">📋 View Inventory</button>
 
-    <button id="clear-btn" onclick="clearInventory()">🧹 Clear Inventory</button>
+<div id="scanner-container" style="display:none;">
+    <div id="reader"></div>
+    <div id="status" class="idle">Ready...</div>
+</div>
 
-    <div id="scanner-container" style="display:none;">
-        <div id="reader"></div>
-        <div id="status" class="idle">Ready...</div>
-        <div id="error-msg" class="error"></div>
-    </div>
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
+const INVENTORY_URL = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit?gid=1242803893#gid=1242803893";
 
-    <script>
-        // ▼▼▼ GOOGLE APPS SCRIPT URL ▼▼▼
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
-        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+let lastScannedCode = null;
+let lastScannedTime = 0;
+let scanner;
 
-        let html5QrcodeScanner;
-        let lastScannedCode = null;
-        let lastScannedTime = 0;
+function startScanner() {
+    document.getElementById("start-btn").style.display = "none";
+    document.getElementById("clear-btn").style.display = "none";
+    document.getElementById("view-btn").style.display = "none";
+    document.getElementById("scanner-container").style.display = "block";
 
-        function startScanner() {
-            document.getElementById('start-btn').innerText = "Starting Camera...";
-            document.getElementById('clear-btn').style.display = "none";
+    scanner = new Html5QrcodeScanner("reader", {
+        fps: 30,
+        qrbox: { width: 250, height: 100 },
+        formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.CODE_39
+        ],
+        videoConstraints: {
+            facingMode: "environment"
+        }
+    });
+
+    scanner.render(onScanSuccess, () => {});
+}
+
+function onScanSuccess(code) {
+    const now = Date.now();
+    if (code === lastScannedCode && now - lastScannedTime < 1000) return;
+
+    lastScannedCode = code;
+    lastScannedTime = now;
+
+    fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(code)}`)
+        .then(r => r.text())
+        .then(color => {
+            const status = document.getElementById("status");
+            status.textContent = "SAVED: " + color;
+            status.className = "success";
 
             setTimeout(() => {
-                document.getElementById('start-btn').style.display = 'none';
-                document.getElementById('scanner-container').style.display = 'block';
+                status.textContent = "Ready...";
+                status.className = "idle";
+            }, 1200);
+        });
+}
 
-                try {
-                    let config = {
-                        fps: 30,
-                        qrbox: { width: 250, height: 100 },
-                        formatsToSupport: [
-                            Html5QrcodeSupportedFormats.CODE_128,
-                            Html5QrcodeSupportedFormats.EAN_13,
-                            Html5QrcodeSupportedFormats.UPC_A,
-                            Html5QrcodeSupportedFormats.CODE_39
-                        ],
-                        videoConstraints: {
-                            width: { min: 640, ideal: 1280, max: 1920 },
-                            height: { min: 480, ideal: 720, max: 1080 },
-                            facingMode: "environment",
-                            focusMode: "continuous"
-                        }
-                    };
-
-                    html5QrcodeScanner = new Html5QrcodeScanner("reader", config);
-                    html5QrcodeScanner.render(onScanSuccess, () => {});
-                } catch (err) {
-                    const errEl = document.getElementById('error-msg');
-                    errEl.style.display = 'block';
-                    errEl.innerText = "Error: " + err.message;
-                }
-            }, 100);
-        }
-
-        function clearInventory() {
-            if (!confirm("Are you sure you want to CLEAR the entire inventory?")) {
-                return;
-            }
-
-            fetch(`${SCRIPT_URL}?action=clear`, { mode: 'no-cors' })
-                .then(() => alert("Inventory cleared"))
-                .catch(() => alert("Failed to clear inventory"));
-        }
-
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        function playBeep() {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-            gain.gain.setValueAtTime(1.0, audioCtx.currentTime);
-
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.1);
-        }
-
-        function onScanSuccess(decodedText) {
-            const now = Date.now();
-
-            if (decodedText === lastScannedCode && (now - lastScannedTime) < 1000) {
-                return;
-            }
-
-            lastScannedCode = decodedText;
-            lastScannedTime = now;
-
-            playBeep();
-
-            const statusEl = document.getElementById('status');
-            statusEl.innerText = "SAVED: " + decodedText;
-            statusEl.className = "success";
-
-            fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(decodedText)}&qty=1`, { mode: 'no-cors' })
-                .catch(() => {});
-
-            setTimeout(() => {
-                statusEl.innerText = "Ready...";
-                statusEl.className = "idle";
-            }, 1000);
-        }
-    </script>
-
-</body>
-</html>
+function clearInventory() {
+    if (!confirm("Clear entire inventory?")) return;
+    fetch(`${SCRIPT_URL}?action=clear`, { mode: "no-cors" })
