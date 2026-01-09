@@ -2,58 +2,77 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Filament V21 (High Up)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Filament V22 (Split Screen)</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
-        /* 1. RESET: Remove all padding so it touches the edges */
+        /* 1. LAYOUT: Split the screen into two vertical halves */
         body { 
             background-color: #000; 
             color: #fff; 
             font-family: sans-serif; 
-            text-align: center; 
             margin: 0; 
             padding: 0;
-            overflow: hidden; /* Stop scrolling */
-        }
-        
-        /* 2. SCANNER POSITION: Pinned to the very top */
-        #scanner-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background: #000;
-        }
-
-        /* 3. CAMERA WINDOW: Forced to only take up the top 45% of screen */
-        #reader { 
-            width: 100%; 
-            height: 45vh; /* This forces the box high up */
-            border-bottom: 4px solid #333; 
-            background: #000; 
+            height: 100vh; /* Fill phone screen */
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
         }
         
-        /* 4. STATUS TEXT: Big and right below the scanner */
+        /* 2. TOP HALF: Camera Container (50% Height) */
+        #scanner-container {
+            width: 100%;
+            height: 50vh; /* Camera takes exactly top half */
+            background: #000;
+            position: relative;
+            overflow: hidden;
+            border-bottom: 2px solid #333;
+        }
+
+        #reader { 
+            width: 100%; 
+            height: 100%; 
+            border: none;
+        }
+        
+        /* Fix video filling the space */
+        #reader video {
+            object-fit: cover;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* 3. BOTTOM HALF: Status Area (50% Height) */
+        #status-area {
+            height: 50vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Center text vertically */
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+            background: #111;
+        }
+
+        /* Big Status Text */
         #status { 
-            margin-top: 20px; 
-            font-size: 1.5rem; 
+            font-size: 2rem; 
             font-weight: bold; 
-            min-height: 50px; 
+            margin-bottom: 10px;
             text-transform: uppercase;
         }
         
-        .success { color: #0f0; transition: color 0.2s; }
-        .idle { color: #888; }
-        .error { color: #f00; display: none; margin-top: 20px; border: 1px solid red; padding: 10px;}
+        #last-scanned {
+            font-size: 1.2rem;
+            color: #888;
+        }
 
-        /* 5. BUTTON: Centered in the middle of the screen */
+        .success { color: #0f0; transition: color 0.1s; }
+        .idle { color: #555; }
+        .error { color: #f00; font-size: 0.8rem; margin-top: 10px;}
+
+        /* Start Button Centered in Status Area initially */
         #start-btn { 
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
             padding: 20px 40px; 
             font-size: 1.3rem; 
             background: #007bff; 
@@ -67,11 +86,18 @@
 </head>
 <body>
 
-    <button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
-
-    <div id="scanner-container" style="display:none;">
+    <div id="scanner-container">
         <div id="reader"></div>
-        <div id="status" class="idle">Ready...</div>
+    </div>
+
+    <div id="status-area">
+        <button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
+        
+        <div id="status-text-wrapper" style="display:none;">
+            <div id="status" class="idle">Ready...</div>
+            <div id="last-scanned">Waiting for scan</div>
+        </div>
+        
         <div id="error-msg" class="error"></div>
     </div>
 
@@ -85,14 +111,13 @@
         let lastScannedTime = 0;
 
         function startScanner() {
-            document.getElementById('start-btn').innerText = "Starting Camera...";
+            document.getElementById('start-btn').innerText = "Starting...";
             
             setTimeout(() => {
                 document.getElementById('start-btn').style.display = 'none';
-                document.getElementById('scanner-container').style.display = 'block';
+                document.getElementById('status-text-wrapper').style.display = 'block';
 
                 try {
-                    // CONFIG: Same V20 Engine
                     let config = {
                         fps: 30, 
                         qrbox: { width: 250, height: 100 }, 
@@ -103,8 +128,6 @@
                             Html5QrcodeSupportedFormats.CODE_39
                         ],
                         videoConstraints: {
-                            width: { min: 640, ideal: 1280, max: 1920 },
-                            height: { min: 480, ideal: 720, max: 1080 },
                             facingMode: "environment",
                             focusMode: "continuous"
                         }
@@ -115,8 +138,8 @@
                     html5QrcodeScanner.render(onScanSuccess, (err) => {});
 
                 } catch (err) {
+                    document.getElementById('error-msg').innerText = err.message;
                     document.getElementById('error-msg').style.display = 'block';
-                    document.getElementById('error-msg').innerText = "Error: " + err.message;
                 }
             }, 100);
         }
@@ -149,8 +172,11 @@
             playBeep();
             
             const statusEl = document.getElementById('status');
-            statusEl.innerText = "SAVED: " + decodedText;
+            const subStatusEl = document.getElementById('last-scanned');
+            
+            statusEl.innerText = "SAVED!";
             statusEl.className = "success";
+            subStatusEl.innerText = decodedText;
 
             fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(decodedText)}&qty=1`, { mode: 'no-cors' })
             .catch(err => console.error(err));
