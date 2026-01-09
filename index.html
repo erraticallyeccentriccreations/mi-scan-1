@@ -37,4 +37,128 @@
             min-height: 40px; 
         }
 
-        .success { colo
+        .success { color: #0f0; transition: color 0.2s; }
+        .idle { color: #888; }
+
+        .error { 
+            color: #f00; 
+            display: none; 
+            margin-top: 20px; 
+            border: 1px solid red; 
+            padding: 10px;
+        }
+
+        #start-btn { 
+            padding: 20px 40px; 
+            font-size: 1.3rem; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            margin-top: 20vh; 
+            cursor: pointer; 
+        }
+    </style>
+</head>
+<body>
+
+    <button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
+
+    <div id="scanner-container" style="display:none;">
+        <div id="reader"></div>
+        <div id="status" class="idle">Ready...</div>
+        <div id="error-msg" class="error"></div>
+    </div>
+
+    <script>
+        // ▼▼▼ YOUR WORKING URL ▼▼▼
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec"; 
+        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        let html5QrcodeScanner;
+        let lastScannedCode = null;
+        let lastScannedTime = 0;
+
+        function startScanner() {
+            document.getElementById('start-btn').innerText = "Starting Camera...";
+
+            setTimeout(() => {
+                document.getElementById('start-btn').style.display = 'none';
+                document.getElementById('scanner-container').style.display = 'block';
+
+                try {
+                    let config = {
+                        fps: 30,
+                        qrbox: { width: 250, height: 100 },
+                        formatsToSupport: [
+                            Html5QrcodeSupportedFormats.CODE_128,
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.UPC_A,
+                            Html5QrcodeSupportedFormats.CODE_39
+                        ],
+                        videoConstraints: {
+                            width: { min: 640, ideal: 1280, max: 1920 },
+                            height: { min: 480, ideal: 720, max: 1080 },
+                            facingMode: "environment",
+                            focusMode: "continuous"
+                        }
+                    };
+
+                    html5QrcodeScanner = new Html5QrcodeScanner("reader", config);
+
+                    html5QrcodeScanner.render(onScanSuccess, () => {});
+                } catch (err) {
+                    const errEl = document.getElementById('error-msg');
+                    errEl.style.display = 'block';
+                    errEl.innerText = "Error: " + err.message;
+                }
+            }, 100);
+        }
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playBeep() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            gain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function onScanSuccess(decodedText) {
+            const now = Date.now();
+
+            if (decodedText === lastScannedCode && (now - lastScannedTime) < 1000) {
+                return;
+            }
+
+            lastScannedCode = decodedText;
+            lastScannedTime = now;
+
+            playBeep();
+
+            const statusEl = document.getElementById('status');
+            statusEl.innerText = "SAVED: " + decodedText;
+            statusEl.className = "success";
+
+            fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(decodedText)}&qty=1`, { mode: 'no-cors' })
+                .catch(() => {});
+
+            setTimeout(() => {
+                statusEl.innerText = "Ready...";
+                statusEl.className = "idle";
+            }, 1000);
+        }
+    </script>
+
+</body>
+</html>
