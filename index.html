@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Filament V20 (Final)</title>
+    <title>Filament V20</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
@@ -16,12 +16,11 @@
             padding: 10px; 
         }
 
-        /* Move entire scanner UI higher */
+        /* Lift scanner UI higher */
         #scanner-container {
             margin-top: -80px;
         }
 
-        /* Move camera viewport slightly more */
         #reader { 
             width: 100%; 
             border: 2px solid #333; 
@@ -37,7 +36,7 @@
             min-height: 40px; 
         }
 
-        .success { color: #0f0; transition: color 0.2s; }
+        .success { color: #0f0; }
         .idle { color: #888; }
 
         .error { 
@@ -57,12 +56,29 @@
             border-radius: 8px; 
             margin-top: 20vh; 
             cursor: pointer; 
+            width: 90%;
+            max-width: 320px;
+        }
+
+        #clear-btn {
+            padding: 14px 30px;
+            font-size: 1rem;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            margin-top: 15px;
+            cursor: pointer;
+            width: 90%;
+            max-width: 320px;
         }
     </style>
 </head>
 <body>
 
     <button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
+
+    <button id="clear-btn" onclick="clearInventory()">🧹 Clear Inventory</button>
 
     <div id="scanner-container" style="display:none;">
         <div id="reader"></div>
@@ -71,8 +87,8 @@
     </div>
 
     <script>
-        // ▼▼▼ YOUR WORKING URL ▼▼▼
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec"; 
+        // ▼▼▼ GOOGLE APPS SCRIPT URL ▼▼▼
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
         // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         let html5QrcodeScanner;
@@ -81,6 +97,7 @@
 
         function startScanner() {
             document.getElementById('start-btn').innerText = "Starting Camera...";
+            document.getElementById('clear-btn').style.display = "none";
 
             setTimeout(() => {
                 document.getElementById('start-btn').style.display = 'none';
@@ -105,7 +122,6 @@
                     };
 
                     html5QrcodeScanner = new Html5QrcodeScanner("reader", config);
-
                     html5QrcodeScanner.render(onScanSuccess, () => {});
                 } catch (err) {
                     const errEl = document.getElementById('error-msg');
@@ -113,6 +129,16 @@
                     errEl.innerText = "Error: " + err.message;
                 }
             }, 100);
+        }
+
+        function clearInventory() {
+            if (!confirm("Are you sure you want to CLEAR the entire inventory?")) {
+                return;
+            }
+
+            fetch(`${SCRIPT_URL}?action=clear`, { mode: 'no-cors' })
+                .then(() => alert("Inventory cleared"))
+                .catch(() => alert("Failed to clear inventory"));
         }
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
