@@ -80,7 +80,7 @@ button {
 
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
-const INVENTORY_URL = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit?gid=1242803893#gid=1242803893";
+const INVENTORY_URL = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit?gid=0#gid=0";
 
 let lastScannedCode = null;
 let lastScannedTime = 0;
@@ -133,3 +133,4 @@ function onScanSuccess(code) {
 function clearInventory() {
     if (!confirm("Clear entire inventory?")) return;
     fetch(`${SCRIPT_URL}?action=clear`, { mode: "no-cors" })
+
