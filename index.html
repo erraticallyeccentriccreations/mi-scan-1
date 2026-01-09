@@ -3,36 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Filament V20 (Final)</title>
+    <title>Filament V21 (High Up)</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
+        /* 1. RESET: Remove all padding so it touches the edges */
         body { 
             background-color: #000; 
             color: #fff; 
             font-family: sans-serif; 
             text-align: center; 
             margin: 0; 
-            padding: 10px; 
+            padding: 0;
+            overflow: hidden; /* Stop scrolling */
         }
         
-        /* 1. MOVED UP: Reduced top margin so it sits high */
+        /* 2. SCANNER POSITION: Pinned to the very top */
         #scanner-container {
-            margin-top: 10px; 
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: #000;
         }
 
+        /* 3. CAMERA WINDOW: Forced to only take up the top 45% of screen */
         #reader { 
             width: 100%; 
-            border: 2px solid #333; 
+            height: 45vh; /* This forces the box high up */
+            border-bottom: 4px solid #333; 
             background: #000; 
-            min-height: 250px; 
+            overflow: hidden;
         }
         
-        #status { margin-top: 15px; font-size: 1.2rem; font-weight: bold; min-height: 40px; }
+        /* 4. STATUS TEXT: Big and right below the scanner */
+        #status { 
+            margin-top: 20px; 
+            font-size: 1.5rem; 
+            font-weight: bold; 
+            min-height: 50px; 
+            text-transform: uppercase;
+        }
+        
         .success { color: #0f0; transition: color 0.2s; }
         .idle { color: #888; }
         .error { color: #f00; display: none; margin-top: 20px; border: 1px solid red; padding: 10px;}
 
-        #start-btn { padding: 20px 40px; font-size: 1.3rem; background: #007bff; color: white; border: none; border-radius: 8px; margin-top: 20vh; cursor: pointer; }
+        /* 5. BUTTON: Centered in the middle of the screen */
+        #start-btn { 
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px; 
+            font-size: 1.3rem; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            width: 80%;
+        }
     </style>
 </head>
 <body>
@@ -55,7 +85,6 @@
         let lastScannedTime = 0;
 
         function startScanner() {
-            // Show "Starting..." immediately so you know the button worked
             document.getElementById('start-btn').innerText = "Starting Camera...";
             
             setTimeout(() => {
@@ -63,7 +92,7 @@
                 document.getElementById('scanner-container').style.display = 'block';
 
                 try {
-                    // EXACT V17 CONFIG (The one that worked)
+                    // CONFIG: Same V20 Engine
                     let config = {
                         fps: 30, 
                         qrbox: { width: 250, height: 100 }, 
@@ -83,15 +112,13 @@
 
                     html5QrcodeScanner = new Html5QrcodeScanner("reader", config);
                     
-                    html5QrcodeScanner.render(onScanSuccess, (err) => {
-                        // Ignore minor errors
-                    });
+                    html5QrcodeScanner.render(onScanSuccess, (err) => {});
 
                 } catch (err) {
                     document.getElementById('error-msg').style.display = 'block';
                     document.getElementById('error-msg').innerText = "Error: " + err.message;
                 }
-            }, 100); // Tiny delay to allow UI to update
+            }, 100);
         }
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -111,7 +138,7 @@
         function onScanSuccess(decodedText, decodedResult) {
             const now = Date.now();
 
-            // 1. COOLDOWN: 1 SECOND (This prevents the double scan)
+            // 1 SECOND COOLDOWN
             if (decodedText === lastScannedCode && (now - lastScannedTime) < 1000) {
                 return; 
             }
@@ -128,7 +155,6 @@
             fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(decodedText)}&qty=1`, { mode: 'no-cors' })
             .catch(err => console.error(err));
 
-            // Reset text after 1 second
             setTimeout(() => { 
                 statusEl.innerText = "Ready..."; 
                 statusEl.className = "idle";
