@@ -19,30 +19,35 @@
 
   #controls { 
     position:fixed; top:0; left:0; width:100%; 
-    background:#111; z-index:10; padding:15px 0; 
-    box-shadow: 0 2px 10px rgba(0,0,0,0.5); 
+    background:#000; z-index:10; padding:10px 0; 
   }
 
-  #scanner { margin-top:300px; display:none; }
-  #status { margin-top: 20px; font-size: 1.2rem; color: #aaa; padding-bottom: 50px; }
+  /* Reverted Scanner Position */
+  #scanner { margin-top:240px; display:none; }
+  
+  #status { margin-top: 15px; font-size: 1.2rem; color: #aaa; }
 
-  /* POPUP STYLES */
-  #popup {
-    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.85); z-index: 999;
-    align-items: center; justify-content: center; flex-direction: column;
+  /* FLOATING NOTIFICATION (Toast) */
+  #notification {
+    position: fixed;
+    top: 150px; /* Sits between buttons and scanner */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px;
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    color: white;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    pointer-events: none; /* Allows clicking through it */
+    z-index: 100;
   }
-  #popup-card {
-    background: #fff; color: #000; width: 85%; max-width: 400px;
-    padding: 30px; border-radius: 15px; text-align: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  }
-  #popup-title { font-size: 1.2rem; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;}
-  #popup-result { font-size: 2rem; font-weight: bold; margin-bottom: 25px; color: #007bff; line-height: 1.2;}
-  #popup-btn {
-    background: #28a745; color: #fff; border: none; padding: 15px 40px;
-    font-size: 1.5rem; border-radius: 50px; cursor: pointer; width: 100%;
-  }
+  .success-toast { background: rgba(40, 167, 69, 0.9); box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4); }
+  .error-toast { background: rgba(220, 53, 69, 0.9); box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4); }
 </style>
 </head>
 
@@ -54,29 +59,23 @@
   <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
 </div>
 
+<div id="notification">Ready</div>
+
 <div id="scanner">
   <div id="reader"></div>
   <div id="status">Loading data...</div>
-</div>
-
-<div id="popup">
-  <div id="popup-card">
-    <div id="popup-title">Scanned Item</div>
-    <div id="popup-result">...</div>
-    <button id="popup-btn" onclick="closePopup()">OK / Next</button>
-  </div>
 </div>
 
 <script>
 // --- CONFIGURATION --- //
 const SCRIPT = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
 const INVENTORY = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
-// Use the Published CSV link
 const PRODUCTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
 // --------------------- //
 
 let products = {};
 let scanner;
+let locked = false;
 let audioCtx = null; // Lazy load audio
 
 /* SOUND FUNCTION (Safe for Mobile) */
@@ -91,9 +90,7 @@ function beep() {
     g.gain.value = 1.0;
     o.connect(g); g.connect(audioCtx.destination);
     o.start(); o.stop(audioCtx.currentTime + 0.15);
-  } catch (e) {
-    console.log("Audio error (ignored):", e);
-  }
+  } catch (e) { console.log("Audio silent"); }
 }
 
 /* DATA CLEANER */
@@ -105,7 +102,6 @@ function clean(str) {
 }
 
 /* LOAD PRODUCTS */
-// Add timestamp to prevent caching old data
 fetch(PRODUCTS_URL + "&t=" + Date.now())
   .then(r => r.text())
   .then(t => {
@@ -127,39 +123,29 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
   })
   .catch(e => {
     document.getElementById("status").textContent = "Error loading product list.";
-    console.error(e);
   });
 
 /* START CAMERA */
 function start() {
   document.getElementById("scanner").style.display = "block";
   
-  // Initialize Audio Context on user click to prevent crash
-  if (!audioCtx) {
-     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } 
-     catch(e) {}
-  }
+  // Init Audio on click
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
 
-  if (scanner) return; // Prevent double init
+  if (scanner) return; 
 
-  try {
-    scanner = new Html5Qrcode("reader");
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 30, qrbox: { width: 250, height: 150 } },
-      onScan
-    ).catch(err => {
-      alert("Camera Error: " + err);
-    });
-  } catch (e) {
-    alert("Scanner library not loaded. Check internet.");
-  }
+  scanner = new Html5Qrcode("reader");
+  scanner.start(
+    { facingMode: "environment" },
+    { fps: 30, qrbox: { width: 250, height: 100 } }, // Reverted to 100 height
+    onScan
+  ).catch(err => alert("Camera Error: " + err));
 }
 
 /* SCAN HANDLER */
 function onScan(code) {
-  // Pause scanning immediately
-  if (scanner) scanner.pause();
+  if (locked) return;
+  locked = true;
 
   code = clean(code);
   
@@ -172,44 +158,39 @@ function onScan(code) {
 
   const displayColor = color || "UNKNOWN";
   
-  // Play Beep
   beep();
+  showNotification(displayColor);
 
-  // Show Popup
-  showPopup(displayColor);
-
-  // Save to Google Sheets
+  // Send to Google Sheets
   fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`, { mode: "no-cors" });
+
+  // Wait 1.5 seconds before allowing next scan
+  setTimeout(() => { locked = false; }, 1500);
 }
 
-/* POPUP LOGIC */
-function showPopup(colorName) {
-  const popup = document.getElementById("popup");
-  const resultText = document.getElementById("popup-result");
-  const btn = document.getElementById("popup-btn");
+/* NOTIFICATION LOGIC */
+let toastTimeout;
+function showNotification(msg) {
+  const el = document.getElementById("notification");
+  
+  el.textContent = msg;
+  el.style.opacity = "1";
+  
+  // Style based on success/fail
+  el.className = (msg === "UNKNOWN") ? "error-toast" : "success-toast";
 
-  popup.style.display = "flex";
-  resultText.textContent = colorName;
-
-  if (colorName === "UNKNOWN") {
-    resultText.style.color = "#dc3545"; // Red
-    btn.style.background = "#6c757d";
-  } else {
-    resultText.style.color = "#007bff"; // Blue
-    btn.style.background = "#28a745";
-  }
-}
-
-function closePopup() {
-  document.getElementById("popup").style.display = "none";
-  // Resume scanning
-  if (scanner) scanner.resume();
+  // Hide after 2 seconds
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    el.style.opacity = "0";
+  }, 2000);
 }
 
 /* BUTTONS */
 function clearInventory() {
   if (confirm("Delete all inventory data?")) {
     fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
+    showNotification("Inventory Cleared");
   }
 }
 function openInventory() {
