@@ -3,7 +3,7 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scanner</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
   body { 
@@ -11,23 +11,21 @@
     background: #000; 
     color: #fff; 
     font-family: sans-serif; 
-    text-align: center;
-    /* Added padding so the bottom buttons never cover content */
-    padding-bottom: 180px; 
+    text-align: center; 
+    overflow: hidden; /* Prevents scrolling when we pull the scanner up */
   }
 
-  /* BUTTON STYLES (Fixed to Bottom, Guaranteed on Top) */
+  /* BUTTON STYLES (Fixed to Bottom) */
   #controls { 
     position: fixed; 
     bottom: 0; 
     left: 0; 
     width: 100%; 
     background: #000; 
-    z-index: 1000; /* Super high priority */
+    z-index: 20; 
     padding: 15px 0; 
     border-top: 1px solid #333;
-    /* Fix for iPhone Home Bar area */
-    padding-bottom: env(safe-area-inset-bottom); 
+    padding-bottom: 25px; /* Extra padding for modern phones with swipe bars */
   }
 
   button.main-btn { 
@@ -44,16 +42,14 @@
   }
   button:active { opacity: 0.8; transform: scale(0.98); }
 
-  /* SCANNER POSITION */
+  /* SCANNER POSITION (Moved UP by 20mm) */
   #scanner { 
-    width: 100%;
-    margin-top: 0; 
+    margin-top: -20mm; /* Pulls the camera view up by ~20mm */
     display: none; 
     position: relative;
     z-index: 1;
   }
   
-  /* Status Text */
   #status { 
     margin-top: 10px; 
     font-size: 1.1rem; 
@@ -65,7 +61,7 @@
   /* FLOATING TEXT NOTIFICATION */
   #notification {
     position: fixed;
-    top: 30px; /* High up */
+    top: 40px; /* Near the top */
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
@@ -74,9 +70,9 @@
     text-align: center;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
-    pointer-events: none; /* Click-through allowed */
-    z-index: 2000; /* Above everything */
-    text-shadow: 0px 3px 8px rgba(0,0,0,1);
+    pointer-events: none;
+    z-index: 100;
+    text-shadow: 0px 3px 8px rgba(0,0,0,1); /* Strong shadow for readability */
   }
   
   /* Text Colors */
@@ -138,10 +134,7 @@ function clean(str) {
 
 /* LOAD PRODUCTS */
 fetch(PRODUCTS_URL + "&t=" + Date.now())
-  .then(r => {
-    if (!r.ok) throw new Error("HTTP " + r.status); // Check for 404 on the sheet itself
-    return r.text();
-  })
+  .then(r => r.text())
   .then(t => {
     const rows = t.split("\n").slice(1);
     let count = 0;
@@ -160,8 +153,7 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     document.getElementById("status").textContent = `Ready (${count} products loaded)`;
   })
   .catch(e => {
-    document.getElementById("status").textContent = "Error loading product list (404 or Network)";
-    console.error(e);
+    document.getElementById("status").textContent = "Error loading product list.";
   });
 
 /* START CAMERA */
@@ -171,16 +163,12 @@ function start() {
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
   if (scanner) return; 
 
-  try {
-    scanner = new Html5Qrcode("reader");
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 30, qrbox: { width: 250, height: 100 } },
-      onScan
-    ).catch(err => alert("Camera Error: " + err));
-  } catch (err) {
-    alert("Scanner library failed to load. Check internet.");
-  }
+  scanner = new Html5Qrcode("reader");
+  scanner.start(
+    { facingMode: "environment" },
+    { fps: 30, qrbox: { width: 250, height: 100 } },
+    onScan
+  ).catch(err => alert("Camera Error: " + err));
 }
 
 /* SCAN HANDLER */
