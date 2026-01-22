@@ -36,13 +36,15 @@
   /* NOTIFICATIONS */
   #notification {
     position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
-    width: 100%; font-size: 2.5rem; font-weight: bold; text-align: center;
+    width: 90%; font-size: 2rem; font-weight: bold; text-align: center;
     opacity: 0; transition: opacity 0.2s ease-in-out; pointer-events: none; 
     z-index: 2000; text-shadow: 0px 3px 8px rgba(0,0,0,1);
+    white-space: pre-wrap; /* Allows text wrapping for long camera names */
   }
   
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
+  .info-text    { color: #007bff; font-size: 1.5rem; } /* Blue for Info */
 
 </style>
 </head>
@@ -60,7 +62,7 @@
   <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light</button>
   <button class="main-btn" onclick="switchCamera()" style="background:#6f42c1; color:#fff;">📷 Switch Cam</button>
   
-  <button class="main-btn full-width" onclick="start()" style="background:#28a745; color:#fff;">▶ Start / Restart</button>
+  <button class="main-btn full-width" id="btn-scan-toggle" onclick="toggleScan()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
   
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear</button>
   <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View</button>
@@ -78,6 +80,7 @@ let scanner;
 let locked = false;
 let audioCtx = null;
 let isFlashOn = false; 
+let isScanning = false; // Track running state
 let cameras = [];      
 let currentCamIndex = 0;
 
@@ -110,7 +113,6 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     const rows = t.split("\n").slice(1);
     let count = 0;
     rows.forEach(row => {
-      // CSV: Barcode(0), Brand(1), Material(2), Type(3), Color(4)
       const cols = row.split(",");
       if (cols.length > 4) {
         const barcode = clean(cols[0]);
@@ -137,7 +139,31 @@ Html5Qrcode.getCameras().then(devices => {
   }
 }).catch(err => console.log("Cam error", err));
 
-/* START CAMERA */
+/* TOGGLE SCAN (START / STOP) */
+function toggleScan() {
+  const btn = document.getElementById("btn-scan-toggle");
+  
+  if (isScanning) {
+    // STOP CAMERA
+    if (scanner) {
+      scanner.stop().then(() => {
+        isScanning = false;
+        btn.innerHTML = "▶ Start Scanning";
+        btn.style.background = "#28a745"; // Green
+        document.getElementById("scanner").style.display = "none";
+        
+        // Reset flash button UI since stopping camera kills flash
+        isFlashOn = false;
+        updateFlashBtn();
+      }).catch(err => console.log("Stop failed", err));
+    }
+  } else {
+    // START CAMERA
+    start();
+  }
+}
+
+/* START CAMERA INTERNAL */
 function start() {
   document.getElementById("scanner").style.display = "block";
   if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
@@ -150,25 +176,26 @@ function start() {
 }
 
 function initScanner(cameraIdOrConfig) {
+  // If exists, clear it first
   if (scanner) {
-     scanner.stop().then(() => {
-        scanner.clear();
-        createAndStart(cameraIdOrConfig);
-     }).catch(err => {
-        scanner.clear();
-        createAndStart(cameraIdOrConfig);
-     });
-  } else {
-    createAndStart(cameraIdOrConfig);
+     scanner.clear();
   }
-}
 
-function createAndStart(idOrConfig) {
   scanner = new Html5Qrcode("reader");
   const config = { fps: 30, qrbox: { width: 250, height: 100 } };
+  
   isFlashOn = false;
   updateFlashBtn();
-  scanner.start(idOrConfig, config, onScan).catch(err => alert("Start Failed: " + err));
+
+  scanner.start(cameraIdOrConfig, config, onScan)
+  .then(() => {
+    // SUCCESS START
+    isScanning = true;
+    const btn = document.getElementById("btn-scan-toggle");
+    btn.innerHTML = "⏹ Stop Camera";
+    btn.style.background = "#dc3545"; // Red
+  })
+  .catch(err => alert("Start Failed: " + err));
 }
 
 /* SWITCH CAMERA */
@@ -177,9 +204,21 @@ function switchCamera() {
     showNotification("Only 1 Cam Found", "error-text");
     return;
   }
+  
+  // Cycle Index
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
-  start();
-  showNotification("Switched Camera", "success-text");
+  
+  // Show Name
+  let camLabel = cameras[currentCamIndex].label || ("Camera " + (currentCamIndex + 1));
+  // Clean label slightly (remove noisy IDs in parenthesis often found on Android)
+  camLabel = camLabel.split('(')[0].trim();
+  
+  showNotification(camLabel, "info-text");
+
+  // Only restart if currently running
+  if (isScanning) {
+    start();
+  }
 }
 
 /* FLASHLIGHT */
@@ -233,7 +272,6 @@ function onScan(code) {
   beep();
   showNotification(color, color === "UNKNOWN" ? "error-text" : "success-text");
 
-  // Include Barcode in request so Apps Script can combine them
   const url = `${SCRIPT}?barcode=${encodeURIComponent(code)}` +
               `&color=${encodeURIComponent(color)}` +
               `&brand=${encodeURIComponent(brand)}` +
