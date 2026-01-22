@@ -52,3 +52,395 @@
     border-top: 1px solid #333;
     padding-bottom: env(safe-area-inset-bottom);
     display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+  }
+  button.main-btn { 
+    width: 45%; max-width: 180px; padding: 12px; font-size: 1rem; 
+    border: none; border-radius: 8px; cursor: pointer; font-weight: bold; 
+  }
+  button.full-width { width: 92%; max-width: 380px; }
+  #flash-btn { display: none; } 
+
+  #scanner { width: 100%; display: none; z-index: 1; }
+  #notification {
+    position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
+    width: 90%; font-size: 2rem; font-weight: bold; text-align: center;
+    opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 2000; 
+    text-shadow: 0px 3px 8px black;
+  }
+  .success-text { color: #00ff00; } 
+  .error-text   { color: #ff3333; } 
+  .info-text    { color: #007bff; font-size: 1.5rem; }
+</style>
+</head>
+
+<body>
+
+<div id="notification"></div>
+<div id="scanner"><div id="reader"></div></div>
+
+<div id="unknown-modal" class="modal-overlay">
+  <div class="modal-box" style="text-align: center;">
+    <div class="modal-title">Unknown Barcode</div>
+    <p id="unknown-code-display" style="font-family: monospace; font-size: 1.2rem; color: #fff; margin-bottom: 20px;"></p>
+    <div class="btn-row">
+      <button class="btn btn-blue" onclick="closeModals()">Scan Again</button>
+      <button class="btn btn-green" onclick="openAddForm()">Add New Filament</button>
+    </div>
+  </div>
+</div>
+
+<div id="add-form-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title">Add New Filament</div>
+    
+    <div class="form-group">
+      <label>Barcode</label>
+      <input type="text" id="new-barcode" readonly style="background:#444; color:#aaa;">
+    </div>
+
+    <div class="form-group">
+        <label>Brand</label>
+        <select id="sel-brand" onchange="checkNew('brand')"></select>
+        <div id="inp-brand-wrap" class="new-input-wrapper" style="display:none;">
+            <input type="text" id="inp-brand"><button class="ok-btn" onclick="confirmNew('brand')">OK</button>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label>Material</label>
+        <select id="sel-material" onchange="onMaterialChange()"></select>
+        <div id="inp-material-wrap" class="new-input-wrapper" style="display:none;">
+            <input type="text" id="inp-material"><button class="ok-btn" onclick="confirmNew('material')">OK</button>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label>Type</label>
+        <select id="sel-type" onchange="checkNew('type')"></select>
+        <div id="inp-type-wrap" class="new-input-wrapper" style="display:none;">
+            <input type="text" id="inp-type"><button class="ok-btn" onclick="confirmNew('type')">OK</button>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label>Color</label>
+        <select id="sel-color" onchange="checkNew('color')"></select>
+        <div id="inp-color-wrap" class="new-input-wrapper" style="display:none;">
+            <input type="text" id="inp-color"><button class="ok-btn" onclick="confirmNew('color')">OK</button>
+        </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-red" onclick="closeModals()">Cancel</button>
+      <button class="btn btn-green" onclick="saveNewProduct()">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light</button>
+  <button class="main-btn" onclick="switchCamera()" style="background:#6f42c1; color:#fff;">📷 Switch Cam</button>
+  <button class="main-btn full-width" id="btn-scan-toggle" onclick="toggleScan()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
+  <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear</button>
+  <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View</button>
+</div>
+
+<script>
+const SCRIPT = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
+const INVENTORY = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
+const PRODUCTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
+
+let products = {};
+// New structure to link Material -> Types
+let uniqueData = { brands: new Set(), materials: new Set(), types: new Set(), colors: new Set() };
+let typesByMaterial = {}; // { "PLA": Set("Matte", "Silk"), "PETG": Set("Standard") }
+
+let scanner = null;
+let locked = false;
+let audioCtx = null;
+let isFlashOn = false; 
+let isScanning = false;
+let cameras = [];      
+let currentCamIndex = 0; 
+
+// --- 1. DATA LOADING ---
+fetch(PRODUCTS_URL + "&t=" + Date.now()).then(r => r.text()).then(t => {
+    const rows = t.split("\n").slice(1);
+    let count = 0;
+    rows.forEach(row => {
+      const cols = row.split(",");
+      if (cols.length > 4) {
+        const barcode = clean(cols[0]);
+        const brand = clean(cols[1]); const material = clean(cols[2]); const type = clean(cols[3]); const color = clean(cols[4]);
+        if (barcode) { 
+          products[barcode] = { brand, material, type, color };
+          count++; 
+          
+          if(brand) uniqueData.brands.add(brand); 
+          if(color) uniqueData.colors.add(color);
+          
+          if(material) {
+              uniqueData.materials.add(material);
+              // Map Material to Type
+              if (!typesByMaterial[material]) typesByMaterial[material] = new Set();
+              if (type) typesByMaterial[material].add(type);
+          }
+          if(type) uniqueData.types.add(type); // Keep global list just in case
+        }
+      }
+    });
+    console.log("Loaded", count);
+});
+
+function clean(str) {
+  if (!str) return "";
+  str = String(str).trim();
+  if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
+  return str.trim();
+}
+
+// --- 2. MODAL LOGIC ---
+function showUnknownModal(code) {
+  locked = true; 
+  document.getElementById("unknown-code-display").textContent = code;
+  document.getElementById("unknown-modal").style.display = "flex";
+}
+
+function closeModals() {
+  document.getElementById("unknown-modal").style.display = "none";
+  document.getElementById("add-form-modal").style.display = "none";
+  locked = false; 
+  startScanner(); 
+}
+
+function openAddForm() {
+  document.getElementById("unknown-modal").style.display = "none";
+  document.getElementById("add-form-modal").style.display = "flex";
+  
+  const code = document.getElementById("unknown-code-display").textContent;
+  document.getElementById("new-barcode").value = code;
+
+  // Reset Input Wrappers to be hidden
+  document.querySelectorAll('.new-input-wrapper').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('select').forEach(el => el.style.display = 'block');
+
+  populateSelect("sel-brand", uniqueData.brands);
+  populateSelect("sel-material", uniqueData.materials);
+  // Type is empty until Material is picked
+  populateSelect("sel-type", new Set()); 
+  populateSelect("sel-color", uniqueData.colors);
+}
+
+// --- DROPDOWN LOGIC ---
+function populateSelect(id, set) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = "<option value='' disabled selected>Select...</option>";
+  
+  let newOpt = document.createElement("option");
+  newOpt.value = "NEW";
+  newOpt.text = "➕ New...";
+  newOpt.style.color = "#28a745";
+  newOpt.style.fontWeight = "bold";
+  sel.appendChild(newOpt);
+
+  Array.from(set).sort().forEach(val => {
+    let opt = document.createElement("option");
+    opt.value = val;
+    opt.text = val;
+    sel.appendChild(opt);
+  });
+}
+
+// NEW: Handle Material Change -> Filter Types
+function onMaterialChange() {
+    const matSel = document.getElementById("sel-material");
+    const selectedMat = matSel.value;
+
+    // First check if they selected "NEW"
+    checkNew('material');
+
+    // If it's a real material, filter the types
+    if (selectedMat && selectedMat !== "NEW") {
+        const validTypes = typesByMaterial[selectedMat] || new Set();
+        populateSelect("sel-type", validTypes);
+    } 
+    // If they picked "NEW" (and text box is showing), or nothing, show full list or empty
+    else if (selectedMat === "NEW") {
+        populateSelect("sel-type", uniqueData.types); // Allow any type if material is new
+    }
+}
+
+function checkNew(field) {
+  const sel = document.getElementById("sel-" + field);
+  const wrap = document.getElementById("inp-" + field + "-wrap");
+  
+  if (sel.value === "NEW") {
+    sel.style.display = "none"; 
+    wrap.style.display = "flex"; 
+    document.getElementById("inp-" + field).focus();
+  }
+}
+
+function confirmNew(field) {
+  const inp = document.getElementById("inp-" + field);
+  const sel = document.getElementById("sel-" + field);
+  const wrap = document.getElementById("inp-" + field + "-wrap");
+  
+  const newVal = clean(inp.value);
+  if (newVal) {
+    let opt = document.createElement("option");
+    opt.value = newVal; opt.text = newVal;
+    sel.appendChild(opt);
+    sel.value = newVal;
+    
+    // If we just created a new Material, we need to handle the Type filter
+    if (field === 'material') {
+        // New material has no linked types yet, so show all options or empty
+        populateSelect("sel-type", uniqueData.types);
+    }
+  } else {
+    sel.selectedIndex = 0; 
+  }
+  inp.value = ""; wrap.style.display = "none"; sel.style.display = "block";
+}
+
+function saveNewProduct() {
+  const barcode = document.getElementById("new-barcode").value;
+  const brand = document.getElementById("sel-brand").value;
+  const material = document.getElementById("sel-material").value;
+  const type = document.getElementById("sel-type").value;
+  const color = document.getElementById("sel-color").value;
+
+  if (brand === "NEW" || !brand || !material || !type || !color) {
+    alert("Please fill in all fields."); return;
+  }
+
+  products[barcode] = { brand, material, type, color };
+
+  // Update local mappings for next time
+  if(!typesByMaterial[material]) typesByMaterial[material] = new Set();
+  typesByMaterial[material].add(type);
+
+  const url = `${SCRIPT}?action=add_product` +
+              `&barcode=${encodeURIComponent(barcode)}` +
+              `&brand=${encodeURIComponent(brand)}` +
+              `&material=${encodeURIComponent(material)}` +
+              `&type=${encodeURIComponent(type)}` +
+              `&color=${encodeURIComponent(color)}`;
+  
+  fetch(url, { mode: "no-cors" });
+  
+  showNotification("Product Added!", "success-text");
+  closeModals();
+}
+
+// --- 3. SCANNER LOGIC ---
+Html5Qrcode.getCameras().then(devices => {
+  cameras = devices;
+  if (cameras.length > 3) currentCamIndex = 3; 
+  else if (cameras.length > 0) currentCamIndex = cameras.length - 1; 
+}).catch(err => console.log("Cam error", err));
+
+function toggleScan() { if (isScanning) stopScanner(); else startScanner(); }
+
+function startScanner() {
+  document.getElementById("scanner").style.display = "block";
+  if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
+  if (!scanner) scanner = new Html5Qrcode("reader");
+
+  const config = { fps: 30, qrbox: { width: 250, height: 100 } };
+  const camId = (cameras.length > 0) ? cameras[currentCamIndex].id : { facingMode: "environment" };
+
+  isFlashOn = false;
+  updateFlashBtn();
+  updateFlashVisibility();
+
+  scanner.start(camId, config, onScan).then(() => {
+    isScanning = true;
+    document.getElementById("btn-scan-toggle").innerHTML = "⏹ Stop Camera";
+    document.getElementById("btn-scan-toggle").style.background = "#dc3545"; 
+  }).catch(err => alert("Start Failed: " + err));
+}
+
+function stopScanner() {
+  if (scanner && isScanning) {
+    scanner.stop().then(() => {
+      scanner.clear(); isScanning = false;
+      document.getElementById("btn-scan-toggle").innerHTML = "▶ Start Scanning";
+      document.getElementById("btn-scan-toggle").style.background = "#28a745"; 
+      document.getElementById("scanner").style.display = "none";
+      document.getElementById("flash-btn").style.display = "none";
+    });
+  }
+}
+
+function switchCamera() {
+  if (cameras.length < 2) { showNotification("Only 1 Cam Found", "error-text"); return; }
+  currentCamIndex = (currentCamIndex + 1) % cameras.length;
+  updateFlashVisibility();
+  
+  if (isScanning) {
+    scanner.stop().then(() => {
+       scanner.clear(); isScanning = false; setTimeout(() => { startScanner(); }, 200);
+    }).catch(err => startScanner());
+  } else {
+     let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
+     showNotification("Selected: " + label.split('(')[0], "info-text");
+  }
+}
+
+function updateFlashVisibility() {
+    if (currentCamIndex === 3) document.getElementById("flash-btn").style.display = "block";
+    else document.getElementById("flash-btn").style.display = "none";
+}
+
+function toggleFlash() {
+  const video = document.querySelector("#scanner video");
+  if (!video || !video.srcObject) return;
+  const track = video.srcObject.getVideoTracks()[0];
+  isFlashOn = !isFlashOn;
+  track.applyConstraints({ advanced: [{ torch: isFlashOn }] }).then(() => updateFlashBtn())
+  .catch(() => { track.applyConstraints({ torch: isFlashOn }).then(() => updateFlashBtn()); });
+}
+
+function updateFlashBtn() {
+    const btn = document.getElementById("flash-btn");
+    if (isFlashOn) { btn.innerHTML = "🔦 Light: ON"; btn.style.background = "#ffc107"; btn.style.color = "#000"; }
+    else { btn.innerHTML = "🔦 Light"; btn.style.background = "#555"; btn.style.color = "#fff"; }
+}
+
+function onScan(code) {
+  if (locked) return;
+  code = clean(code);
+  let item = products[code];
+  if (!item) item = products["0" + code];
+  if (!item && code.startsWith("0")) item = products[code.substring(1)];
+
+  if (!item) {
+    beep();
+    showUnknownModal(code);
+    return;
+  }
+
+  locked = true;
+  beep();
+  showNotification(item.color, "success-text");
+
+  const url = `${SCRIPT}?barcode=${encodeURIComponent(code)}` +
+              `&color=${encodeURIComponent(item.color)}` +
+              `&brand=${encodeURIComponent(item.brand)}` +
+              `&material=${encodeURIComponent(item.material)}` +
+              `&type=${encodeURIComponent(item.type)}`;
+  fetch(url, { mode: "no-cors" });
+  setTimeout(() => { locked = false; }, 1500);
+}
+
+function beep() { try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); const o = audioCtx.createOscillator(); o.frequency.value = 1000; const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.15); } catch (e) {} }
+
+function showNotification(msg, cssClass) { const el = document.getElementById("notification"); el.textContent = msg; el.style.opacity = "1"; el.className = cssClass; setTimeout(() => { el.style.opacity = "0"; }, 2000); }
+
+function clearInventory() { if (confirm("Clear inventory?")) { fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" }); showNotification("Inventory Cleared", "success-text"); } }
+function openInventory() { window.open(INVENTORY, "_blank"); }
+</script>
+</body>
+</html>
