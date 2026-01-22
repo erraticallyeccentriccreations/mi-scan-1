@@ -1,176 +1,120 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Filament Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scanner</title>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
-body { background:#000; color:#fff; font-family:sans-serif; margin:0; text-align:center; }
-
-#controls {
-  position:fixed;
-  top:0;
-  width:100%;
-  background:#000;
-  z-index:9999;
-  padding:10px;
-}
-
+body { margin:0; background:#000; color:#fff; font-family:sans-serif; text-align:center; }
 button {
-  width:90%;
-  max-width:340px;
-  padding:16px;
-  margin:6px auto;
-  font-size:1.1rem;
-  border:none;
-  border-radius:8px;
+  width:90%; max-width:360px;
+  padding:16px; margin:8px;
+  font-size:1.2rem; border:none; border-radius:8px;
 }
-
-#start-btn { background:#007bff; color:#fff; }
-#clear-btn { background:#dc3545; color:#fff; }
-#view-btn  { background:#28a745; color:#fff; }
-
-#scanner-container {
-  margin-top:220px;
-  display:none;
-}
-
-#reader {
-  border:2px solid #333;
-  min-height:260px;
-}
-
-#status {
-  margin-top:15px;
-  font-size:1.4rem;
-  min-height:40px;
-}
-
-.success { color:#00ff00; }
-.idle { color:#888; }
+#controls { position:fixed; top:0; width:100%; background:#000; z-index:10; padding:10px; }
+#scanner { margin-top:240px; display:none; }
+#status { font-size:1.6rem; margin-top:15px; min-height:40px; }
 </style>
 </head>
 
 <body>
 
 <div id="controls">
-  <button onclick="startScanner()">⚡ Start Scanner</button>
+  <button onclick="start()">▶ Start Scanning</button>
   <button onclick="clearInventory()">🧹 Clear Inventory</button>
-  <button onclick="viewInventory()">📋 View Inventory</button>
+  <button onclick="openInventory()">📋 View Inventory</button>
 </div>
 
-<div id="scanner-container">
+<div id="scanner">
   <div id="reader"></div>
-  <div id="status" class="idle">Loading products…</div>
+  <div id="status">Loading products…</div>
 </div>
 
 <script>
-const SCRIPT_URL =
+const SCRIPT =
 "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
 
-const INVENTORY_URL =
+const INVENTORY =
 "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
 
-const PRODUCTS_CSV_URL =
+const PRODUCTS =
 "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/export?format=csv&gid=1242803893";
 
-/* 🔊 VERY LOUD BEEP */
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function loudBeep() {
-  if (audioCtx.state === "suspended") audioCtx.resume();
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.type = "sawtooth";
-  o.frequency.value = 900;
-  g.gain.value = 1.3;
-  o.connect(g);
-  g.connect(audioCtx.destination);
-  o.start();
-  o.stop(audioCtx.currentTime + 0.12);
+let products = {};
+let locked = false;
+let scanner;
+
+/* VERY LOUD BEEP */
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+function beep() {
+  if (ctx.state === "suspended") ctx.resume();
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.frequency.value = 1000;
+  g.gain.value = 1.4;
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.15);
 }
 
-/* SAFE CSV PARSER */
-function parseCSV(text) {
-  const rows = [];
-  let row=[], val="", q=false;
-  for (let c of text) {
-    if (c === '"') q=!q;
-    else if (c === ',' && !q) { row.push(val); val=""; }
-    else if (c === '\n' && !q) { row.push(val); rows.push(row); row=[]; val=""; }
-    else val+=c;
-  }
-  if (val) row.push(val);
-  return rows;
+/* CSV PARSER */
+function parseCSV(t) {
+  return t.trim().split("\n").slice(1).map(r => r.split(","));
 }
 
-/* PRODUCT LOOKUP */
-const products = {};
-
-fetch(PRODUCTS_CSV_URL)
+/* LOAD PRODUCTS */
+fetch(PRODUCTS)
 .then(r => r.text())
-.then(csv => {
-  const rows = parseCSV(csv);
-  rows.slice(1).forEach(r => {
-    const barcode = String(r[0]).trim(); // 🔒 STRING
-    const color   = String(r[4]).trim(); // Color
-    if (barcode && color) {
-      products[barcode] = color;
-    }
+.then(t => {
+  parseCSV(t).forEach(r => {
+    const barcode = String(r[0]).trim();
+    const color   = String(r[4]).trim();
+    if (barcode && color) products[barcode] = color;
   });
-  document.getElementById("status").textContent = "Ready...";
+  document.getElementById("status").textContent = "Ready";
 });
 
-/* SCANNER */
-let lastCode=null, lastTime=0, scanner;
-
-function startScanner() {
-  document.getElementById("scanner-container").style.display="block";
-  scanner = new Html5QrcodeScanner("reader", {
-    fps:30,
-    qrbox:{width:250,height:100},
-    videoConstraints:{facingMode:"environment"}
-  });
-  scanner.render(onScanSuccess, ()=>{});
+/* START */
+function start() {
+  document.getElementById("scanner").style.display="block";
+  scanner = new Html5Qrcode("reader");
+  scanner.start(
+    { facingMode:"environment" },
+    { fps:30, qrbox:{ width:250, height:100 } },
+    onScan
+  );
 }
 
-function onScanSuccess(code) {
-  const now = Date.now();
-  if (code === lastCode && now - lastTime < 1000) return;
-  lastCode = code;
-  lastTime = now;
+/* SCAN HANDLER */
+function onScan(code) {
+  if (locked) return;
+  locked = true;
 
-  loudBeep();
-
-  code = String(code).trim(); // 🔒 STRING
-
+  code = String(code).trim();
   const color = products[code] || "UNKNOWN";
 
+  beep();
+
+  document.getElementById("status").textContent =
+    `Saved: ${color}`;
+
   fetch(
-    `${SCRIPT_URL}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(color)}`,
+    `${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(color)}`,
     { mode:"no-cors" }
   );
 
-  const s = document.getElementById("status");
-  s.textContent = `SAVED: ${color}`;
-  s.className = "success";
-
-  setTimeout(() => {
-    s.textContent = "Ready...";
-    s.className = "idle";
-  }, 1200);
+  setTimeout(() => locked = false, 900);
 }
 
 /* BUTTONS */
 function clearInventory() {
   if (confirm("Clear inventory?"))
-    fetch(`${SCRIPT_URL}?action=clear`, { mode:"no-cors" });
+    fetch(`${SCRIPT}?action=clear`, { mode:"no-cors" });
 }
 
-function viewInventory() {
-  window.open(INVENTORY_URL, "_blank");
+function openInventory() {
+  window.open(INVENTORY, "_blank");
 }
 </script>
 </body>
