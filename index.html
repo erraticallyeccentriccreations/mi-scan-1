@@ -27,6 +27,9 @@
   }
   button.full-width { width: 92%; max-width: 380px; }
   
+  /* Flash button hidden by default */
+  #flash-btn { display: none; }
+
   button:active { opacity: 0.8; transform: scale(0.98); }
 
   #scanner { width: 100%; margin-top: 0; display: none; position: relative; z-index: 1; }
@@ -58,6 +61,7 @@
 
 <div id="controls">
   <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light</button>
+  
   <button class="main-btn" onclick="switchCamera()" style="background:#6f42c1; color:#fff;">📷 Switch Cam</button>
   <button class="main-btn full-width" id="btn-scan-toggle" onclick="toggleScan()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear</button>
@@ -131,9 +135,9 @@ Html5Qrcode.getCameras().then(devices => {
   
   // LOGIC: Try Camera 4 (Index 3) first
   if (cameras.length > 3) {
-    currentCamIndex = 3; // Try the 4th camera
+    currentCamIndex = 3; 
   } else if (cameras.length > 0) {
-    currentCamIndex = cameras.length - 1; // Fallback to last available
+    currentCamIndex = cameras.length - 1; 
   }
   
 }).catch(err => console.log("Cam error", err));
@@ -162,12 +166,27 @@ function startScanner() {
 
   isFlashOn = false;
   updateFlashBtn();
+  
+  // HIDE FLASH BUTTON INITIALLY (Wait for check)
+  document.getElementById("flash-btn").style.display = "none";
 
   scanner.start(startConfig, config, onScan).then(() => {
     isScanning = true;
     const btn = document.getElementById("btn-scan-toggle");
     btn.innerHTML = "⏹ Stop Camera";
     btn.style.background = "#dc3545"; 
+    
+    // --- SMART CAPABILITY CHECK ---
+    // Ask the running camera if it supports 'torch'
+    try {
+        const capabilities = scanner.getRunningTrackCameraCapabilities();
+        if (capabilities.torch) {
+            // Show button if torch exists
+            document.getElementById("flash-btn").style.display = "block"; 
+        }
+    } catch(e) {
+        console.log("Could not check capabilities", e);
+    }
     
     // Notify User
     if(cameras.length > 0) {
@@ -190,6 +209,9 @@ function stopScanner() {
       btn.innerHTML = "▶ Start Scanning";
       btn.style.background = "#28a745"; 
       document.getElementById("scanner").style.display = "none";
+      
+      // Hide flash button when stopped
+      document.getElementById("flash-btn").style.display = "none";
       isFlashOn = false;
       updateFlashBtn();
     }).catch(err => console.log("Stop failed", err));
@@ -202,7 +224,7 @@ function switchCamera() {
     return;
   }
   
-  // Just go to next number. Simple.
+  // Go to next number
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
   
   // RESTART with new index
@@ -230,6 +252,7 @@ function toggleFlash() {
   track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
   .then(() => updateFlashBtn())
   .catch(err => {
+      // Retry for Android legacy
       track.applyConstraints({ torch: isFlashOn })
       .then(() => updateFlashBtn())
       .catch(e => {
