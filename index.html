@@ -3,7 +3,7 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scanner</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 
 <style>
   body { 
@@ -11,8 +11,9 @@
     background: #000; 
     color: #fff; 
     font-family: sans-serif; 
-    text-align: center; 
-    overflow: hidden; /* Prevents scrolling when we pull the scanner up */
+    text-align: center;
+    /* Increased padding to fit the 4th button */
+    padding-bottom: 250px; 
   }
 
   /* BUTTON STYLES (Fixed to Bottom) */
@@ -22,18 +23,18 @@
     left: 0; 
     width: 100%; 
     background: #000; 
-    z-index: 20; 
-    padding: 15px 0; 
+    z-index: 1000; 
+    padding: 10px 0; /* Reduced vertical padding slightly to fit 4 buttons */
     border-top: 1px solid #333;
-    padding-bottom: 25px; /* Extra padding for modern phones with swipe bars */
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   button.main-btn { 
     width: 90%; 
     max-width: 360px; 
-    padding: 16px; 
-    margin: 8px auto; 
-    font-size: 1.2rem; 
+    padding: 14px; /* Slightly smaller padding to fit 4 buttons nicely */
+    margin: 6px auto; 
+    font-size: 1.1rem; 
     border: none; 
     border-radius: 10px; 
     cursor: pointer; 
@@ -42,9 +43,10 @@
   }
   button:active { opacity: 0.8; transform: scale(0.98); }
 
-  /* SCANNER POSITION (Moved UP by 20mm) */
+  /* SCANNER POSITION */
   #scanner { 
-    margin-top: -20mm; /* Pulls the camera view up by ~20mm */
+    width: 100%;
+    margin-top: 0; 
     display: none; 
     position: relative;
     z-index: 1;
@@ -61,7 +63,7 @@
   /* FLOATING TEXT NOTIFICATION */
   #notification {
     position: fixed;
-    top: 40px; /* Near the top */
+    top: 30px; 
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
@@ -70,9 +72,9 @@
     text-align: center;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
-    pointer-events: none;
-    z-index: 100;
-    text-shadow: 0px 3px 8px rgba(0,0,0,1); /* Strong shadow for readability */
+    pointer-events: none; 
+    z-index: 2000; 
+    text-shadow: 0px 3px 8px rgba(0,0,0,1);
   }
   
   /* Text Colors */
@@ -92,6 +94,8 @@
 </div>
 
 <div id="controls">
+  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Flashlight: OFF</button>
+  
   <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
   <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
@@ -108,6 +112,7 @@ let products = {};
 let scanner;
 let locked = false;
 let audioCtx = null;
+let isFlashOn = false; // Track flashlight state
 
 /* SOUND FUNCTION */
 function beep() {
@@ -134,7 +139,10 @@ function clean(str) {
 
 /* LOAD PRODUCTS */
 fetch(PRODUCTS_URL + "&t=" + Date.now())
-  .then(r => r.text())
+  .then(r => {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.text();
+  })
   .then(t => {
     const rows = t.split("\n").slice(1);
     let count = 0;
@@ -154,6 +162,7 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
   })
   .catch(e => {
     document.getElementById("status").textContent = "Error loading product list.";
+    console.error(e);
   });
 
 /* START CAMERA */
@@ -163,12 +172,47 @@ function start() {
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
   if (scanner) return; 
 
-  scanner = new Html5Qrcode("reader");
-  scanner.start(
-    { facingMode: "environment" },
-    { fps: 30, qrbox: { width: 250, height: 100 } },
-    onScan
-  ).catch(err => alert("Camera Error: " + err));
+  try {
+    scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 30, qrbox: { width: 250, height: 100 } },
+      onScan
+    ).catch(err => alert("Camera Error: " + err));
+  } catch (err) {
+    alert("Scanner library failed to load.");
+  }
+}
+
+/* FLASHLIGHT LOGIC */
+function toggleFlash() {
+  if (!scanner) {
+    alert("Please Start Scanning first.");
+    return;
+  }
+  
+  isFlashOn = !isFlashOn;
+  
+  scanner.applyVideoConstraints({
+    advanced: [{ torch: isFlashOn }]
+  })
+  .then(() => {
+    const btn = document.getElementById("flash-btn");
+    if (isFlashOn) {
+      btn.innerHTML = "🔦 Flashlight: ON";
+      btn.style.background = "#ffc107"; // Yellow
+      btn.style.color = "#000";
+    } else {
+      btn.innerHTML = "🔦 Flashlight: OFF";
+      btn.style.background = "#555"; // Gray
+      btn.style.color = "#fff";
+    }
+  })
+  .catch(err => {
+    console.log(err);
+    alert("Flashlight not supported on this device.");
+    isFlashOn = !isFlashOn; // Revert state if failed
+  });
 }
 
 /* SCAN HANDLER */
@@ -196,11 +240,8 @@ function onScan(code) {
 let toastTimeout;
 function showNotification(msg) {
   const el = document.getElementById("notification");
-  
   el.textContent = msg;
   el.style.opacity = "1";
-  
-  // Green text for success, Red for unknown
   el.className = (msg === "UNKNOWN") ? "error-text" : "success-text";
 
   clearTimeout(toastTimeout);
