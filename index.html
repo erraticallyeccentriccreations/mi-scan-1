@@ -11,7 +11,41 @@
     text-align: center; padding-bottom: 220px; 
   }
 
-  /* CONTROLS LAYOUT */
+  /* MODALS (Popups) */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); z-index: 5000;
+    align-items: center; justify-content: center;
+  }
+  .modal-box {
+    background: #222; padding: 20px; border-radius: 12px;
+    width: 90%; max-width: 400px; border: 1px solid #444;
+    text-align: left;
+  }
+  .modal-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; text-align: center; color: #ffc107; }
+  
+  /* FORM ELEMENTS */
+  .form-group { margin-bottom: 12px; }
+  label { display: block; margin-bottom: 5px; font-weight: bold; color: #aaa; }
+  input, select {
+    width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #555;
+    background: #333; color: #fff; font-size: 1rem; box-sizing: border-box;
+  }
+  
+  /* "New" Input Wrapper */
+  .new-input-wrapper { display: none; margin-top: 5px; display: flex; gap: 5px; }
+  .new-input-wrapper input { flex-grow: 1; }
+  .ok-btn { background: #28a745; color: white; border: none; padding: 0 15px; border-radius: 6px; cursor: pointer; }
+
+  /* BUTTONS */
+  .btn-row { display: flex; gap: 10px; margin-top: 20px; justify-content: center; }
+  .btn { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; flex: 1; }
+  .btn-green { background: #28a745; color: #fff; }
+  .btn-blue { background: #007bff; color: #fff; }
+  .btn-red { background: #dc3545; color: #fff; }
+  .btn:active { opacity: 0.8; }
+
+  /* CONTROLS */
   #controls { 
     position: fixed; bottom: 0; left: 0; width: 100%; 
     background: #000; z-index: 1000; padding: 10px 0; 
@@ -19,34 +53,23 @@
     padding-bottom: env(safe-area-inset-bottom);
     display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
   }
-
   button.main-btn { 
-    width: 45%; max-width: 180px; 
-    padding: 12px; font-size: 1rem; border: none; 
-    border-radius: 8px; cursor: pointer; font-weight: bold; 
+    width: 45%; max-width: 180px; padding: 12px; font-size: 1rem; 
+    border: none; border-radius: 8px; cursor: pointer; font-weight: bold; 
   }
   button.full-width { width: 92%; max-width: 380px; }
-  
-  /* Flash button hidden by default in CSS */
-  #flash-btn { display: none; }
+  #flash-btn { display: none; } /* Hidden by default */
 
-  button:active { opacity: 0.8; transform: scale(0.98); }
-
-  #scanner { width: 100%; margin-top: 0; display: none; position: relative; z-index: 1; }
-  #status { margin-top: 10px; font-size: 1.1rem; color: #aaa; z-index: 5; }
-
+  #scanner { width: 100%; display: none; z-index: 1; }
   #notification {
     position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
     width: 90%; font-size: 2rem; font-weight: bold; text-align: center;
-    opacity: 0; transition: opacity 0.2s ease-in-out; pointer-events: none; 
-    z-index: 2000; text-shadow: 0px 3px 8px rgba(0,0,0,1);
-    white-space: pre-wrap; 
+    opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 2000; 
+    text-shadow: 0px 3px 8px black;
   }
-  
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
   .info-text    { color: #007bff; font-size: 1.5rem; }
-
 </style>
 </head>
 
@@ -54,14 +77,73 @@
 
 <div id="notification"></div>
 
-<div id="scanner">
-  <div id="reader"></div>
-  <div id="status">Loading data...</div>
+<div id="scanner"><div id="reader"></div></div>
+
+<div id="unknown-modal" class="modal-overlay">
+  <div class="modal-box" style="text-align: center;">
+    <div class="modal-title">Unknown Barcode</div>
+    <p id="unknown-code-display" style="font-family: monospace; font-size: 1.2rem; color: #fff; margin-bottom: 20px;"></p>
+    <div class="btn-row">
+      <button class="btn btn-blue" onclick="closeModals()">Scan Again</button>
+      <button class="btn btn-green" onclick="openAddForm()">Add New Filament</button>
+    </div>
+  </div>
+</div>
+
+<div id="add-form-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title">Add New Filament</div>
+    
+    <div class="form-group">
+      <label>Barcode</label>
+      <input type="text" id="new-barcode" readonly style="background:#444; color:#aaa;">
+    </div>
+
+    <div class="form-group">
+      <label>Brand</label>
+      <select id="sel-brand" onchange="checkNew('brand')"></select>
+      <div id="inp-brand-wrap" class="new-input-wrapper" style="display:none;">
+        <input type="text" id="inp-brand" placeholder="Type new brand...">
+        <button class="ok-btn" onclick="confirmNew('brand')">OK</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Material</label>
+      <select id="sel-material" onchange="checkNew('material')"></select>
+      <div id="inp-material-wrap" class="new-input-wrapper" style="display:none;">
+        <input type="text" id="inp-material" placeholder="Type new material...">
+        <button class="ok-btn" onclick="confirmNew('material')">OK</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Type</label>
+      <select id="sel-type" onchange="checkNew('type')"></select>
+      <div id="inp-type-wrap" class="new-input-wrapper" style="display:none;">
+        <input type="text" id="inp-type" placeholder="Type new type...">
+        <button class="ok-btn" onclick="confirmNew('type')">OK</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Color</label>
+      <select id="sel-color" onchange="checkNew('color')"></select>
+      <div id="inp-color-wrap" class="new-input-wrapper" style="display:none;">
+        <input type="text" id="inp-color" placeholder="Type new color...">
+        <button class="ok-btn" onclick="confirmNew('color')">OK</button>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-red" onclick="closeModals()">Cancel</button>
+      <button class="btn btn-green" onclick="saveNewProduct()">Done</button>
+    </div>
+  </div>
 </div>
 
 <div id="controls">
   <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light</button>
-  
   <button class="main-btn" onclick="switchCamera()" style="background:#6f42c1; color:#fff;">📷 Switch Cam</button>
   <button class="main-btn full-width" id="btn-scan-toggle" onclick="toggleScan()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear</button>
@@ -69,13 +151,15 @@
 </div>
 
 <script>
-// --- CONFIGURATION --- //
 const SCRIPT = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
 const INVENTORY = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
 const PRODUCTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
-// --------------------- //
 
+// Data Storage
 let products = {};
+let uniqueData = { brands: new Set(), materials: new Set(), types: new Set(), colors: new Set() };
+
+// Scanner Vars
 let scanner = null;
 let locked = false;
 let audioCtx = null;
@@ -84,28 +168,7 @@ let isScanning = false;
 let cameras = [];      
 let currentCamIndex = 0; 
 
-/* SOUND */
-function beep() {
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.frequency.value = 1000;
-    g.gain.value = 1.0;
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(); o.stop(audioCtx.currentTime + 0.15);
-  } catch (e) { console.log("Audio silent"); }
-}
-
-function clean(str) {
-  if (!str) return "";
-  str = String(str).trim();
-  if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
-  return str.trim();
-}
-
-/* LOAD DATA */
+// --- 1. DATA LOADING & PARSING ---
 fetch(PRODUCTS_URL + "&t=" + Date.now())
   .then(r => r.text())
   .then(t => {
@@ -115,77 +178,176 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
       const cols = row.split(",");
       if (cols.length > 4) {
         const barcode = clean(cols[0]);
+        const brand = clean(cols[1]);
+        const material = clean(cols[2]);
+        const type = clean(cols[3]);
+        const color = clean(cols[4]);
+
         if (barcode) { 
-          products[barcode] = {
-            brand:    clean(cols[1]),
-            material: clean(cols[2]),
-            type:     clean(cols[3]),
-            color:    clean(cols[4])
-          };
+          products[barcode] = { brand, material, type, color };
           count++; 
+          // Collect unique values for dropdowns
+          if(brand) uniqueData.brands.add(brand);
+          if(material) uniqueData.materials.add(material);
+          if(type) uniqueData.types.add(type);
+          if(color) uniqueData.colors.add(color);
         }
       }
     });
-    document.getElementById("status").textContent = `Ready (${count} products)`;
+    console.log("Loaded", count, "products");
   });
 
-/* SETUP CAMERAS */
+function clean(str) {
+  if (!str) return "";
+  str = String(str).trim();
+  if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
+  return str.trim();
+}
+
+// --- 2. MODAL & FORM LOGIC ---
+function showUnknownModal(code) {
+  locked = true; // Lock scanner
+  document.getElementById("unknown-code-display").textContent = code;
+  document.getElementById("unknown-modal").style.display = "flex";
+}
+
+function closeModals() {
+  document.getElementById("unknown-modal").style.display = "none";
+  document.getElementById("add-form-modal").style.display = "none";
+  locked = false; // Unlock scanner
+  startScanner(); // Ensure scanner is active
+}
+
+function openAddForm() {
+  document.getElementById("unknown-modal").style.display = "none";
+  document.getElementById("add-form-modal").style.display = "flex";
+  
+  // Populate Barcode
+  const code = document.getElementById("unknown-code-display").textContent;
+  document.getElementById("new-barcode").value = code;
+
+  // Populate Dropdowns
+  populateSelect("sel-brand", uniqueData.brands);
+  populateSelect("sel-material", uniqueData.materials);
+  populateSelect("sel-type", uniqueData.types);
+  populateSelect("sel-color", uniqueData.colors);
+}
+
+function populateSelect(id, set) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = "<option value='' disabled selected>Select...</option>";
+  
+  // Sort and add existing options
+  Array.from(set).sort().forEach(val => {
+    let opt = document.createElement("option");
+    opt.value = val;
+    opt.text = val;
+    sel.appendChild(opt);
+  });
+
+  // Add "New" option
+  let newOpt = document.createElement("option");
+  newOpt.value = "NEW";
+  newOpt.text = "➕ New...";
+  newOpt.style.color = "#28a745";
+  newOpt.style.fontWeight = "bold";
+  sel.appendChild(newOpt);
+}
+
+function checkNew(field) {
+  const sel = document.getElementById("sel-" + field);
+  const wrap = document.getElementById("inp-" + field + "-wrap");
+  
+  if (sel.value === "NEW") {
+    sel.style.display = "none";
+    wrap.style.display = "flex";
+    document.getElementById("inp-" + field).focus();
+  }
+}
+
+function confirmNew(field) {
+  const inp = document.getElementById("inp-" + field);
+  const sel = document.getElementById("sel-" + field);
+  const wrap = document.getElementById("inp-" + field + "-wrap");
+  
+  const newVal = clean(inp.value);
+  if (newVal) {
+    // Create new option, insert before "New", and select it
+    let opt = document.createElement("option");
+    opt.value = newVal;
+    opt.text = newVal;
+    sel.insertBefore(opt, sel.lastChild); // Insert before the 'New' button
+    sel.value = newVal;
+  } else {
+    sel.selectedIndex = 0; // Reset if empty
+  }
+
+  // Reset UI
+  inp.value = "";
+  wrap.style.display = "none";
+  sel.style.display = "block";
+}
+
+function saveNewProduct() {
+  const barcode = document.getElementById("new-barcode").value;
+  const brand = document.getElementById("sel-brand").value;
+  const material = document.getElementById("sel-material").value;
+  const type = document.getElementById("sel-type").value;
+  const color = document.getElementById("sel-color").value;
+
+  if (brand === "NEW" || material === "NEW" || type === "NEW" || color === "NEW" || !brand || !material || !type || !color) {
+    alert("Please fill in all fields.");
+    return;
+  }
+
+  // 1. Update Local Data (so we can scan it immediately)
+  products[barcode] = { brand, material, type, color };
+
+  // 2. Send to Google Sheet
+  const url = `${SCRIPT}?action=add_product` +
+              `&barcode=${encodeURIComponent(barcode)}` +
+              `&brand=${encodeURIComponent(brand)}` +
+              `&material=${encodeURIComponent(material)}` +
+              `&type=${encodeURIComponent(type)}` +
+              `&color=${encodeURIComponent(color)}`;
+  
+  fetch(url, { mode: "no-cors" });
+  
+  showNotification("Product Added!", "success-text");
+  closeModals();
+}
+
+// --- 3. SCANNER LOGIC (With Strict Camera 4 Default) ---
+
+// Setup Cameras
 Html5Qrcode.getCameras().then(devices => {
   cameras = devices;
-  
   // LOGIC: Start on Index 3 (Camera 4)
-  if (cameras.length > 3) {
-    currentCamIndex = 3; 
-  } else if (cameras.length > 0) {
-    currentCamIndex = cameras.length - 1; 
-  }
-  
+  if (cameras.length > 3) currentCamIndex = 3; 
+  else if (cameras.length > 0) currentCamIndex = cameras.length - 1; 
 }).catch(err => console.log("Cam error", err));
 
 function toggleScan() {
-  if (isScanning) {
-    stopScanner(); 
-  } else {
-    startScanner(); 
-  }
+  if (isScanning) stopScanner(); else startScanner();
 }
 
 function startScanner() {
   document.getElementById("scanner").style.display = "block";
   if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
-  
-  if (!scanner) {
-    scanner = new Html5Qrcode("reader");
-  }
+  if (!scanner) scanner = new Html5Qrcode("reader");
 
   const config = { fps: 30, qrbox: { width: 250, height: 100 } };
-  
-  // Use the specific ID from the list at currentCamIndex
-  const camId = (cameras.length > 0) ? cameras[currentCamIndex].id : null;
-  const startConfig = camId ? camId : { facingMode: "environment" };
+  const camId = (cameras.length > 0) ? cameras[currentCamIndex].id : { facingMode: "environment" };
 
   isFlashOn = false;
   updateFlashBtn();
-  
-  // Update Flash Visibility IMMEDIATELY based on Index
   updateFlashVisibility();
 
-  scanner.start(startConfig, config, onScan).then(() => {
+  scanner.start(camId, config, onScan).then(() => {
     isScanning = true;
-    const btn = document.getElementById("btn-scan-toggle");
-    btn.innerHTML = "⏹ Stop Camera";
-    btn.style.background = "#dc3545"; 
-    
-    // Notify User
-    if(cameras.length > 0) {
-       let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
-       label = label.split('(')[0].trim();
-       showNotification("Active: " + label, "info-text");
-    }
-  }).catch(err => {
-    console.error(err);
-    alert("Start Failed: " + err);
-  });
+    document.getElementById("btn-scan-toggle").innerHTML = "⏹ Stop Camera";
+    document.getElementById("btn-scan-toggle").style.background = "#dc3545"; 
+  }).catch(err => alert("Start Failed: " + err));
 }
 
 function stopScanner() {
@@ -193,134 +355,98 @@ function stopScanner() {
     scanner.stop().then(() => {
       scanner.clear();
       isScanning = false;
-      const btn = document.getElementById("btn-scan-toggle");
-      btn.innerHTML = "▶ Start Scanning";
-      btn.style.background = "#28a745"; 
+      document.getElementById("btn-scan-toggle").innerHTML = "▶ Start Scanning";
+      document.getElementById("btn-scan-toggle").style.background = "#28a745"; 
       document.getElementById("scanner").style.display = "none";
-      
-      // Always hide flash when stopped
       document.getElementById("flash-btn").style.display = "none";
-      isFlashOn = false;
-      updateFlashBtn();
-    }).catch(err => console.log("Stop failed", err));
+    });
   }
 }
 
 function switchCamera() {
-  if (cameras.length < 2) {
-    showNotification("Only 1 Cam Found", "error-text");
-    return;
-  }
-  
-  // Go to next number
+  if (cameras.length < 2) { showNotification("Only 1 Cam Found", "error-text"); return; }
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
-  
-  // Check Flash Visibility for new camera
   updateFlashVisibility();
   
-  // RESTART with new index
   if (isScanning) {
     scanner.stop().then(() => {
-       scanner.clear();
-       isScanning = false;
-       setTimeout(() => { startScanner(); }, 200);
-    }).catch(err => { startScanner(); });
+       scanner.clear(); isScanning = false; setTimeout(() => { startScanner(); }, 200);
+    }).catch(err => startScanner());
   } else {
-     // Just show notification if not scanning
      let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
      showNotification("Selected: " + label.split('(')[0], "info-text");
   }
 }
 
-// --- NEW FUNCTION: STRICT VISIBILITY ---
 function updateFlashVisibility() {
-    // If we are on Index 3, SHOW IT. Else HIDE IT.
-    // (Note: Index is 0-based, so "4th camera" is index 3)
-    if (currentCamIndex === 3) {
-        document.getElementById("flash-btn").style.display = "block";
-    } else {
-        document.getElementById("flash-btn").style.display = "none";
-    }
+    if (currentCamIndex === 3) document.getElementById("flash-btn").style.display = "block";
+    else document.getElementById("flash-btn").style.display = "none";
 }
 
 function toggleFlash() {
   const video = document.querySelector("#scanner video");
   if (!video || !video.srcObject) return;
   const track = video.srcObject.getVideoTracks()[0];
-  if (!track) return;
-
   isFlashOn = !isFlashOn;
-
-  track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
-  .then(() => updateFlashBtn())
-  .catch(err => {
-      // Retry for Android legacy
-      track.applyConstraints({ torch: isFlashOn })
-      .then(() => updateFlashBtn())
-      .catch(e => {
-         showNotification("Light Blocked", "error-text");
-         isFlashOn = !isFlashOn; 
-         updateFlashBtn();
-      });
-  });
+  track.applyConstraints({ advanced: [{ torch: isFlashOn }] }).then(() => updateFlashBtn())
+  .catch(() => { track.applyConstraints({ torch: isFlashOn }).then(() => updateFlashBtn()); });
 }
 
 function updateFlashBtn() {
     const btn = document.getElementById("flash-btn");
-    if (isFlashOn) {
-      btn.innerHTML = "🔦 Light: ON";
-      btn.style.background = "#ffc107"; btn.style.color = "#000";
-    } else {
-      btn.innerHTML = "🔦 Light";
-      btn.style.background = "#555"; btn.style.color = "#fff";
-    }
+    if (isFlashOn) { btn.innerHTML = "🔦 Light: ON"; btn.style.background = "#ffc107"; btn.style.color = "#000"; }
+    else { btn.innerHTML = "🔦 Light"; btn.style.background = "#555"; btn.style.color = "#fff"; }
 }
 
 function onScan(code) {
   if (locked) return;
-  locked = true;
-  code = clean(code);
   
+  code = clean(code);
   let item = products[code];
   if (!item) item = products["0" + code];
   if (!item && code.startsWith("0")) item = products[code.substring(1)];
 
-  const color    = item ? item.color    : "UNKNOWN";
-  const brand    = item ? item.brand    : "";
-  const material = item ? item.material : "";
-  const type     = item ? item.type     : "";
+  // --- UNKNOWN BARCODE LOGIC ---
+  if (!item) {
+    beep();
+    showUnknownModal(code);
+    return;
+  }
 
+  // --- KNOWN BARCODE LOGIC ---
+  locked = true;
   beep();
-  showNotification(color, color === "UNKNOWN" ? "error-text" : "success-text");
+  showNotification(item.color, "success-text");
 
   const url = `${SCRIPT}?barcode=${encodeURIComponent(code)}` +
-              `&color=${encodeURIComponent(color)}` +
-              `&brand=${encodeURIComponent(brand)}` +
-              `&material=${encodeURIComponent(material)}` +
-              `&type=${encodeURIComponent(type)}`;
-
+              `&color=${encodeURIComponent(item.color)}` +
+              `&brand=${encodeURIComponent(item.brand)}` +
+              `&material=${encodeURIComponent(item.material)}` +
+              `&type=${encodeURIComponent(item.type)}`;
   fetch(url, { mode: "no-cors" });
-  
   setTimeout(() => { locked = false; }, 1500);
+}
+
+function beep() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const o = audioCtx.createOscillator(); o.frequency.value = 1000;
+    const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.15);
+  } catch (e) {}
 }
 
 function showNotification(msg, cssClass) {
   const el = document.getElementById("notification");
-  el.textContent = msg;
-  el.style.opacity = "1";
-  el.className = cssClass || "success-text"; 
-  clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => { el.style.opacity = "0"; }, 2000);
+  el.textContent = msg; el.style.opacity = "1"; el.className = cssClass; 
+  setTimeout(() => { el.style.opacity = "0"; }, 2000);
 }
 
 function clearInventory() {
-  if (confirm("Clear inventory?")) {
-    fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
-    showNotification("Inventory Cleared", "success-text");
-  }
+  if (confirm("Clear inventory?")) { fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" }); showNotification("Inventory Cleared", "success-text"); }
 }
 function openInventory() { window.open(INVENTORY, "_blank"); }
-let toastTimeout;
 </script>
 </body>
 </html>
