@@ -12,8 +12,7 @@
     color: #fff; 
     font-family: sans-serif; 
     text-align: center;
-    /* Increased padding to fit the 4th button */
-    padding-bottom: 250px; 
+    padding-bottom: 250px; /* Space for buttons */
   }
 
   /* BUTTON STYLES (Fixed to Bottom) */
@@ -24,7 +23,7 @@
     width: 100%; 
     background: #000; 
     z-index: 1000; 
-    padding: 10px 0; /* Reduced vertical padding slightly to fit 4 buttons */
+    padding: 10px 0; 
     border-top: 1px solid #333;
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -32,7 +31,7 @@
   button.main-btn { 
     width: 90%; 
     max-width: 360px; 
-    padding: 14px; /* Slightly smaller padding to fit 4 buttons nicely */
+    padding: 14px; 
     margin: 6px auto; 
     font-size: 1.1rem; 
     border: none; 
@@ -42,6 +41,9 @@
     display: block;
   }
   button:active { opacity: 0.8; transform: scale(0.98); }
+
+  /* FLASH BUTTON (Hidden by default until we confirm support) */
+  #flash-btn { display: none; }
 
   /* SCANNER POSITION */
   #scanner { 
@@ -94,7 +96,7 @@
 </div>
 
 <div id="controls">
-  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Flashlight: OFF</button>
+  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light: OFF</button>
   
   <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
@@ -112,7 +114,7 @@ let products = {};
 let scanner;
 let locked = false;
 let audioCtx = null;
-let isFlashOn = false; // Track flashlight state
+let isFlashOn = false; 
 
 /* SOUND FUNCTION */
 function beep() {
@@ -162,7 +164,6 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
   })
   .catch(e => {
     document.getElementById("status").textContent = "Error loading product list.";
-    console.error(e);
   });
 
 /* START CAMERA */
@@ -178,18 +179,30 @@ function start() {
       { facingMode: "environment" },
       { fps: 30, qrbox: { width: 250, height: 100 } },
       onScan
-    ).catch(err => alert("Camera Error: " + err));
+    ).then(() => {
+        // --- CHECK FLASHLIGHT SUPPORT ---
+        // Once camera is running, check if it has a torch
+        try {
+            const track = scanner.getRunningTrackCameraCapabilities();
+            // If torch is supported, show the button
+            if (track && 'torch' in track) {
+                document.getElementById("flash-btn").style.display = "block";
+            } else {
+                console.log("Torch not supported on this device/browser.");
+            }
+        } catch(e) {
+            console.log("Could not check torch capabilities.");
+        }
+    })
+    .catch(err => alert("Camera Error: " + err));
   } catch (err) {
     alert("Scanner library failed to load.");
   }
 }
 
-/* FLASHLIGHT LOGIC */
+/* FLASHLIGHT TOGGLE */
 function toggleFlash() {
-  if (!scanner) {
-    alert("Please Start Scanning first.");
-    return;
-  }
+  if (!scanner) return;
   
   isFlashOn = !isFlashOn;
   
@@ -199,19 +212,19 @@ function toggleFlash() {
   .then(() => {
     const btn = document.getElementById("flash-btn");
     if (isFlashOn) {
-      btn.innerHTML = "🔦 Flashlight: ON";
+      btn.innerHTML = "🔦 Light: ON";
       btn.style.background = "#ffc107"; // Yellow
       btn.style.color = "#000";
     } else {
-      btn.innerHTML = "🔦 Flashlight: OFF";
+      btn.innerHTML = "🔦 Light: OFF";
       btn.style.background = "#555"; // Gray
       btn.style.color = "#fff";
     }
   })
   .catch(err => {
-    console.log(err);
-    alert("Flashlight not supported on this device.");
-    isFlashOn = !isFlashOn; // Revert state if failed
+    // If it fails, revert the button and tell user
+    isFlashOn = !isFlashOn;
+    showNotification("Light Failed");
   });
 }
 
