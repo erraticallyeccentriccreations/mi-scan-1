@@ -26,6 +26,7 @@
     border-radius: 8px; cursor: pointer; font-weight: bold; 
   }
   button.full-width { width: 92%; max-width: 380px; }
+  
   button:active { opacity: 0.8; transform: scale(0.98); }
 
   /* SCANNER POSITION */
@@ -109,11 +110,10 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     const rows = t.split("\n").slice(1);
     let count = 0;
     rows.forEach(row => {
-      // CSV Format: Barcode(0), Brand(1), Material(2), Type(3), Color(4)
+      // CSV: Barcode(0), Brand(1), Material(2), Type(3), Color(4)
       const cols = row.split(",");
       if (cols.length > 4) {
         const barcode = clean(cols[0]);
-        // Store FULL object now, not just color string
         if (barcode) { 
           products[barcode] = {
             brand:    clean(cols[1]),
@@ -221,7 +221,6 @@ function onScan(code) {
   locked = true;
   code = clean(code);
   
-  // Lookup Item Object
   let item = products[code];
   if (!item) item = products["0" + code];
   if (!item && code.startsWith("0")) item = products[code.substring(1)];
@@ -234,8 +233,9 @@ function onScan(code) {
   beep();
   showNotification(color, color === "UNKNOWN" ? "error-text" : "success-text");
 
-  // Send ALL fields to Apps Script
-  const url = `${SCRIPT}?color=${encodeURIComponent(color)}` +
+  // Include Barcode in request so Apps Script can combine them
+  const url = `${SCRIPT}?barcode=${encodeURIComponent(code)}` +
+              `&color=${encodeURIComponent(color)}` +
               `&brand=${encodeURIComponent(brand)}` +
               `&material=${encodeURIComponent(material)}` +
               `&type=${encodeURIComponent(type)}`;
