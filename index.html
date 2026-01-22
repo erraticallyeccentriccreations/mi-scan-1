@@ -170,7 +170,7 @@ function start() {
   } catch (err) { alert("Scanner library failed."); }
 }
 
-/* SMART FLASHLIGHT TOGGLE (Checks Capabilities First) */
+/* FLASHLIGHT TOGGLE: SEQUENTIAL FALLBACK */
 function toggleFlash() {
   const video = document.querySelector("#scanner video");
   if (!video || !video.srcObject) {
@@ -179,40 +179,54 @@ function toggleFlash() {
   }
   
   const track = video.srcObject.getVideoTracks()[0];
-  if (!track) return;
+  if (!track) {
+    showNotification("No Camera Track", "info-text");
+    return;
+  }
 
-  // READ CAPABILITIES (The Fix)
-  // We check what the camera supports before trying to force it.
-  const caps = track.getCapabilities ? track.getCapabilities() : {};
-  
   isFlashOn = !isFlashOn;
 
-  // ROUTE 1: Standard 'torch' (iOS & Some Android)
-  if (caps.torch) {
-      track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
+  // --- METHOD 1: Advanced Constraint (Standard) ---
+  track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
+  .then(() => updateFlashBtn(true))
+  .catch(err1 => {
+      console.log("Method 1 (Advanced) Failed:", err1);
+      
+      // --- METHOD 2: Basic Constraint (Samsung/Legacy) ---
+      track.applyConstraints({ torch: isFlashOn })
       .then(() => updateFlashBtn(true))
-      .catch(e => failFlash(e));
-  } 
-  // ROUTE 2: 'fillLightMode' (Chrome on Android)
-  else if (caps.fillLightMode) {
-      const imageCapture = new ImageCapture(track);
-      imageCapture.setOptions({ fillLightMode: isFlashOn ? "flash" : "off" })
-      .then(() => updateFlashBtn(true))
-      .catch(e => failFlash(e));
-  } 
-  // ROUTE 3: Blind Attempt (If capabilities are hidden)
-  else {
-      track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
-      .then(() => updateFlashBtn(true))
-      .catch(e => failFlash(e));
-  }
+      .catch(err2 => {
+           console.log("Method 2 (Basic) Failed:", err2);
+
+           // --- METHOD 3: ImageCapture (Chrome Android) ---
+           try {
+             if (window.ImageCapture) {
+               const imageCapture = new ImageCapture(track);
+               // 'fillLightMode' uses 'flash' or 'off' (sometimes 'torch')
+               imageCapture.setOptions({ fillLightMode: isFlashOn ? "flash" : "off" })
+               .then(() => updateFlashBtn(true))
+               .catch(err3 => failFlash(err3));
+             } else {
+               failFlash(err2);
+             }
+           } catch(e) {
+             failFlash(e);
+           }
+      });
+  });
 }
 
 function failFlash(error) {
-    console.log("Flash failed:", error);
-    isFlashOn = !isFlashOn; // Revert state
+    console.log("All methods failed:", error);
+    isFlashOn = !isFlashOn; // Revert state because it failed
     updateFlashBtn(false);
-    showNotification("Light Not Supported", "error-text");
+    
+    // Friendly error
+    let msg = "Flash Not Supported";
+    if (error.name === "OverconstrainedError") msg = "Flash Blocked by Device";
+    if (error.name === "NotAllowedError") msg = "Permission Denied";
+    
+    showNotification(msg, "error-text");
 }
 
 function updateFlashBtn(success) {
