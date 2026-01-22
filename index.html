@@ -11,7 +11,7 @@
     text-align: center; padding-bottom: 220px; 
   }
 
-  /* MODALS (Popups) */
+  /* MODALS */
   .modal-overlay {
     display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.85); z-index: 5000;
@@ -24,7 +24,7 @@
   }
   .modal-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; text-align: center; color: #ffc107; }
   
-  /* FORM ELEMENTS */
+  /* FORM */
   .form-group { margin-bottom: 12px; }
   label { display: block; margin-bottom: 5px; font-weight: bold; color: #aaa; }
   input, select {
@@ -32,7 +32,7 @@
     background: #333; color: #fff; font-size: 1rem; box-sizing: border-box;
   }
   
-  /* "New" Input Wrapper */
+  /* New Input Logic */
   .new-input-wrapper { display: none; margin-top: 5px; display: flex; gap: 5px; }
   .new-input-wrapper input { flex-grow: 1; }
   .ok-btn { background: #28a745; color: white; border: none; padding: 0 15px; border-radius: 6px; cursor: pointer; }
@@ -58,7 +58,7 @@
     border: none; border-radius: 8px; cursor: pointer; font-weight: bold; 
   }
   button.full-width { width: 92%; max-width: 380px; }
-  #flash-btn { display: none; } /* Hidden by default */
+  #flash-btn { display: none; } 
 
   #scanner { width: 100%; display: none; z-index: 1; }
   #notification {
@@ -76,7 +76,6 @@
 <body>
 
 <div id="notification"></div>
-
 <div id="scanner"><div id="reader"></div></div>
 
 <div id="unknown-modal" class="modal-overlay">
@@ -99,41 +98,10 @@
       <input type="text" id="new-barcode" readonly style="background:#444; color:#aaa;">
     </div>
 
-    <div class="form-group">
-      <label>Brand</label>
-      <select id="sel-brand" onchange="checkNew('brand')"></select>
-      <div id="inp-brand-wrap" class="new-input-wrapper" style="display:none;">
-        <input type="text" id="inp-brand" placeholder="Type new brand...">
-        <button class="ok-btn" onclick="confirmNew('brand')">OK</button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Material</label>
-      <select id="sel-material" onchange="checkNew('material')"></select>
-      <div id="inp-material-wrap" class="new-input-wrapper" style="display:none;">
-        <input type="text" id="inp-material" placeholder="Type new material...">
-        <button class="ok-btn" onclick="confirmNew('material')">OK</button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Type</label>
-      <select id="sel-type" onchange="checkNew('type')"></select>
-      <div id="inp-type-wrap" class="new-input-wrapper" style="display:none;">
-        <input type="text" id="inp-type" placeholder="Type new type...">
-        <button class="ok-btn" onclick="confirmNew('type')">OK</button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Color</label>
-      <select id="sel-color" onchange="checkNew('color')"></select>
-      <div id="inp-color-wrap" class="new-input-wrapper" style="display:none;">
-        <input type="text" id="inp-color" placeholder="Type new color...">
-        <button class="ok-btn" onclick="confirmNew('color')">OK</button>
-      </div>
-    </div>
+    <div class="form-group"><label>Brand</label><select id="sel-brand" onchange="checkNew('brand')"></select><div id="inp-brand-wrap" class="new-input-wrapper"><input type="text" id="inp-brand"><button class="ok-btn" onclick="confirmNew('brand')">OK</button></div></div>
+    <div class="form-group"><label>Material</label><select id="sel-material" onchange="checkNew('material')"></select><div id="inp-material-wrap" class="new-input-wrapper"><input type="text" id="inp-material"><button class="ok-btn" onclick="confirmNew('material')">OK</button></div></div>
+    <div class="form-group"><label>Type</label><select id="sel-type" onchange="checkNew('type')"></select><div id="inp-type-wrap" class="new-input-wrapper"><input type="text" id="inp-type"><button class="ok-btn" onclick="confirmNew('type')">OK</button></div></div>
+    <div class="form-group"><label>Color</label><select id="sel-color" onchange="checkNew('color')"></select><div id="inp-color-wrap" class="new-input-wrapper"><input type="text" id="inp-color"><button class="ok-btn" onclick="confirmNew('color')">OK</button></div></div>
 
     <div class="btn-row">
       <button class="btn btn-red" onclick="closeModals()">Cancel</button>
@@ -155,11 +123,8 @@ const SCRIPT = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-fl
 const INVENTORY = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
 const PRODUCTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
 
-// Data Storage
 let products = {};
 let uniqueData = { brands: new Set(), materials: new Set(), types: new Set(), colors: new Set() };
-
-// Scanner Vars
 let scanner = null;
 let locked = false;
 let audioCtx = null;
@@ -168,34 +133,25 @@ let isScanning = false;
 let cameras = [];      
 let currentCamIndex = 0; 
 
-// --- 1. DATA LOADING & PARSING ---
-fetch(PRODUCTS_URL + "&t=" + Date.now())
-  .then(r => r.text())
-  .then(t => {
+// --- 1. DATA LOADING ---
+fetch(PRODUCTS_URL + "&t=" + Date.now()).then(r => r.text()).then(t => {
     const rows = t.split("\n").slice(1);
     let count = 0;
     rows.forEach(row => {
       const cols = row.split(",");
       if (cols.length > 4) {
         const barcode = clean(cols[0]);
-        const brand = clean(cols[1]);
-        const material = clean(cols[2]);
-        const type = clean(cols[3]);
-        const color = clean(cols[4]);
-
+        const brand = clean(cols[1]); const material = clean(cols[2]); const type = clean(cols[3]); const color = clean(cols[4]);
         if (barcode) { 
           products[barcode] = { brand, material, type, color };
           count++; 
-          // Collect unique values for dropdowns
-          if(brand) uniqueData.brands.add(brand);
-          if(material) uniqueData.materials.add(material);
-          if(type) uniqueData.types.add(type);
-          if(color) uniqueData.colors.add(color);
+          if(brand) uniqueData.brands.add(brand); if(material) uniqueData.materials.add(material);
+          if(type) uniqueData.types.add(type); if(color) uniqueData.colors.add(color);
         }
       }
     });
-    console.log("Loaded", count, "products");
-  });
+    console.log("Loaded", count);
+});
 
 function clean(str) {
   if (!str) return "";
@@ -204,9 +160,9 @@ function clean(str) {
   return str.trim();
 }
 
-// --- 2. MODAL & FORM LOGIC ---
+// --- 2. MODAL LOGIC ---
 function showUnknownModal(code) {
-  locked = true; // Lock scanner
+  locked = true; 
   document.getElementById("unknown-code-display").textContent = code;
   document.getElementById("unknown-modal").style.display = "flex";
 }
@@ -214,54 +170,50 @@ function showUnknownModal(code) {
 function closeModals() {
   document.getElementById("unknown-modal").style.display = "none";
   document.getElementById("add-form-modal").style.display = "none";
-  locked = false; // Unlock scanner
-  startScanner(); // Ensure scanner is active
+  locked = false; 
+  startScanner(); 
 }
 
 function openAddForm() {
   document.getElementById("unknown-modal").style.display = "none";
   document.getElementById("add-form-modal").style.display = "flex";
   
-  // Populate Barcode
   const code = document.getElementById("unknown-code-display").textContent;
   document.getElementById("new-barcode").value = code;
 
-  // Populate Dropdowns
   populateSelect("sel-brand", uniqueData.brands);
   populateSelect("sel-material", uniqueData.materials);
   populateSelect("sel-type", uniqueData.types);
   populateSelect("sel-color", uniqueData.colors);
 }
 
+// --- DROPDOWN FIX: "NEW" AT TOP ---
 function populateSelect(id, set) {
   const sel = document.getElementById(id);
   sel.innerHTML = "<option value='' disabled selected>Select...</option>";
   
-  // Sort and add existing options
-  Array.from(set).sort().forEach(val => {
-    let opt = document.createElement("option");
-    opt.value = val;
-    opt.text = val;
-    sel.appendChild(opt);
-  });
-
-  // Add "New" option
+  // 1. Add "New" Option FIRST
   let newOpt = document.createElement("option");
   newOpt.value = "NEW";
   newOpt.text = "➕ New...";
   newOpt.style.color = "#28a745";
   newOpt.style.fontWeight = "bold";
   sel.appendChild(newOpt);
+
+  // 2. Add Existing Options
+  Array.from(set).sort().forEach(val => {
+    let opt = document.createElement("option");
+    opt.value = val;
+    opt.text = val;
+    sel.appendChild(opt);
+  });
 }
 
 function checkNew(field) {
   const sel = document.getElementById("sel-" + field);
   const wrap = document.getElementById("inp-" + field + "-wrap");
-  
   if (sel.value === "NEW") {
-    sel.style.display = "none";
-    wrap.style.display = "flex";
-    document.getElementById("inp-" + field).focus();
+    sel.style.display = "none"; wrap.style.display = "flex"; document.getElementById("inp-" + field).focus();
   }
 }
 
@@ -272,20 +224,16 @@ function confirmNew(field) {
   
   const newVal = clean(inp.value);
   if (newVal) {
-    // Create new option, insert before "New", and select it
     let opt = document.createElement("option");
-    opt.value = newVal;
-    opt.text = newVal;
-    sel.insertBefore(opt, sel.lastChild); // Insert before the 'New' button
+    opt.value = newVal; opt.text = newVal;
+    // Insert new option just after "New..." (index 1) but before rest, or just append and select. 
+    // Since we want it selected, appending is fine, user won't notice order immediately.
+    sel.appendChild(opt);
     sel.value = newVal;
   } else {
-    sel.selectedIndex = 0; // Reset if empty
+    sel.selectedIndex = 0; 
   }
-
-  // Reset UI
-  inp.value = "";
-  wrap.style.display = "none";
-  sel.style.display = "block";
+  inp.value = ""; wrap.style.display = "none"; sel.style.display = "block";
 }
 
 function saveNewProduct() {
@@ -295,15 +243,14 @@ function saveNewProduct() {
   const type = document.getElementById("sel-type").value;
   const color = document.getElementById("sel-color").value;
 
-  if (brand === "NEW" || material === "NEW" || type === "NEW" || color === "NEW" || !brand || !material || !type || !color) {
-    alert("Please fill in all fields.");
-    return;
+  if (brand === "NEW" || !brand || !material || !type || !color) {
+    alert("Please fill in all fields."); return;
   }
 
-  // 1. Update Local Data (so we can scan it immediately)
+  // Update Local Data
   products[barcode] = { brand, material, type, color };
 
-  // 2. Send to Google Sheet
+  // Send to Google Sheet (This triggers the backfill in Apps Script)
   const url = `${SCRIPT}?action=add_product` +
               `&barcode=${encodeURIComponent(barcode)}` +
               `&brand=${encodeURIComponent(brand)}` +
@@ -317,19 +264,14 @@ function saveNewProduct() {
   closeModals();
 }
 
-// --- 3. SCANNER LOGIC (With Strict Camera 4 Default) ---
-
-// Setup Cameras
+// --- 3. SCANNER LOGIC ---
 Html5Qrcode.getCameras().then(devices => {
   cameras = devices;
-  // LOGIC: Start on Index 3 (Camera 4)
   if (cameras.length > 3) currentCamIndex = 3; 
   else if (cameras.length > 0) currentCamIndex = cameras.length - 1; 
 }).catch(err => console.log("Cam error", err));
 
-function toggleScan() {
-  if (isScanning) stopScanner(); else startScanner();
-}
+function toggleScan() { if (isScanning) stopScanner(); else startScanner(); }
 
 function startScanner() {
   document.getElementById("scanner").style.display = "block";
@@ -353,8 +295,7 @@ function startScanner() {
 function stopScanner() {
   if (scanner && isScanning) {
     scanner.stop().then(() => {
-      scanner.clear();
-      isScanning = false;
+      scanner.clear(); isScanning = false;
       document.getElementById("btn-scan-toggle").innerHTML = "▶ Start Scanning";
       document.getElementById("btn-scan-toggle").style.background = "#28a745"; 
       document.getElementById("scanner").style.display = "none";
@@ -400,20 +341,21 @@ function updateFlashBtn() {
 
 function onScan(code) {
   if (locked) return;
-  
   code = clean(code);
   let item = products[code];
   if (!item) item = products["0" + code];
   if (!item && code.startsWith("0")) item = products[code.substring(1)];
 
-  // --- UNKNOWN BARCODE LOGIC ---
+  // If item is unknown, show modal.
   if (!item) {
     beep();
     showUnknownModal(code);
+    // OPTIONAL: If you want it to log "UNKNOWN" to the sheet immediately so you can see it:
+    // fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=UNKNOWN`, { mode: "no-cors" });
     return;
   }
 
-  // --- KNOWN BARCODE LOGIC ---
+  // If item is known
   locked = true;
   beep();
   showNotification(item.color, "success-text");
@@ -427,25 +369,11 @@ function onScan(code) {
   setTimeout(() => { locked = false; }, 1500);
 }
 
-function beep() {
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const o = audioCtx.createOscillator(); o.frequency.value = 1000;
-    const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
-    o.start(); o.stop(audioCtx.currentTime + 0.15);
-  } catch (e) {}
-}
+function beep() { try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); const o = audioCtx.createOscillator(); o.frequency.value = 1000; const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.15); } catch (e) {} }
 
-function showNotification(msg, cssClass) {
-  const el = document.getElementById("notification");
-  el.textContent = msg; el.style.opacity = "1"; el.className = cssClass; 
-  setTimeout(() => { el.style.opacity = "0"; }, 2000);
-}
+function showNotification(msg, cssClass) { const el = document.getElementById("notification"); el.textContent = msg; el.style.opacity = "1"; el.className = cssClass; setTimeout(() => { el.style.opacity = "0"; }, 2000); }
 
-function clearInventory() {
-  if (confirm("Clear inventory?")) { fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" }); showNotification("Inventory Cleared", "success-text"); }
-}
+function clearInventory() { if (confirm("Clear inventory?")) { fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" }); showNotification("Inventory Cleared", "success-text"); } }
 function openInventory() { window.open(INVENTORY, "_blank"); }
 </script>
 </body>
