@@ -11,6 +11,7 @@
     text-align: center; padding-bottom: 220px; 
   }
 
+  /* BUTTON STYLES */
   #controls { 
     position: fixed; bottom: 0; left: 0; width: 100%; 
     background: #000; z-index: 1000; padding: 10px 0; 
@@ -28,9 +29,11 @@
   
   button:active { opacity: 0.8; transform: scale(0.98); }
 
+  /* SCANNER POSITION */
   #scanner { width: 100%; margin-top: 0; display: none; position: relative; z-index: 1; }
   #status { margin-top: 10px; font-size: 1.1rem; color: #aaa; z-index: 5; }
 
+  /* NOTIFICATIONS */
   #notification {
     position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
     width: 90%; font-size: 2rem; font-weight: bold; text-align: center;
@@ -41,7 +44,7 @@
   
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
-  .info-text    { color: #007bff; font-size: 1.5rem; }
+  .info-text    { color: #007bff; font-size: 1.5rem; } 
 
 </style>
 </head>
@@ -58,7 +61,9 @@
 <div id="controls">
   <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light</button>
   <button class="main-btn" onclick="switchCamera()" style="background:#6f42c1; color:#fff;">📷 Switch Cam</button>
+  
   <button class="main-btn full-width" id="btn-scan-toggle" onclick="toggleScan()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
+  
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear</button>
   <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View</button>
 </div>
@@ -77,8 +82,9 @@ let audioCtx = null;
 let isFlashOn = false; 
 let isScanning = false;
 let cameras = [];      
-let currentCamIndex = 0; // DEFAULT TO 0
+let currentCamIndex = 0; // STRICTLY 0
 
+/* SOUND */
 function beep() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -92,6 +98,7 @@ function beep() {
   } catch (e) { console.log("Audio silent"); }
 }
 
+/* CLEANER */
 function clean(str) {
   if (!str) return "";
   str = String(str).trim();
@@ -99,6 +106,7 @@ function clean(str) {
   return str.trim();
 }
 
+/* LOAD DATA */
 fetch(PRODUCTS_URL + "&t=" + Date.now())
   .then(r => r.text())
   .then(t => {
@@ -122,16 +130,18 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     document.getElementById("status").textContent = `Ready (${count} products)`;
   });
 
-/* SETUP CAMERAS */
+/* SETUP CAMERAS (NO SORTING) */
 Html5Qrcode.getCameras().then(devices => {
   if (devices && devices.length) {
     cameras = devices;
-    // We strictly use Index 0 as default now
-    currentCamIndex = 0; 
+    currentCamIndex = 0; // Force first camera
   }
 }).catch(err => console.log("Cam error", err));
 
+/* TOGGLE SCAN (START / STOP) */
 function toggleScan() {
+  const btn = document.getElementById("btn-scan-toggle");
+  
   if (isScanning) {
     stopScanner(); 
   } else {
@@ -139,6 +149,7 @@ function toggleScan() {
   }
 }
 
+/* START LOGIC */
 function startScanner() {
   document.getElementById("scanner").style.display = "block";
   if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
@@ -157,19 +168,21 @@ function startScanner() {
   isFlashOn = false;
   updateFlashBtn();
 
+  // Prefer ID if found, otherwise environment fallback
   const startPromise = camId ? scanner.start(camId, config, onScan) : scanner.start({ facingMode: "environment" }, config, onScan);
 
   startPromise.then(() => {
     isScanning = true;
     const btn = document.getElementById("btn-scan-toggle");
     btn.innerHTML = "⏹ Stop Camera";
-    btn.style.background = "#dc3545"; 
+    btn.style.background = "#dc3545"; // Red
   }).catch(err => {
     console.error(err);
     alert("Camera failed to start. Refresh page.");
   });
 }
 
+/* STOP LOGIC */
 function stopScanner() {
   if (scanner && isScanning) {
     scanner.stop().then(() => {
@@ -177,7 +190,7 @@ function stopScanner() {
       isScanning = false;
       const btn = document.getElementById("btn-scan-toggle");
       btn.innerHTML = "▶ Start Scanning";
-      btn.style.background = "#28a745"; 
+      btn.style.background = "#28a745"; // Green
       document.getElementById("scanner").style.display = "none";
       isFlashOn = false;
       updateFlashBtn();
@@ -185,18 +198,22 @@ function stopScanner() {
   }
 }
 
+/* SWITCH CAMERA */
 function switchCamera() {
   if (cameras.length < 2) {
     showNotification("Only 1 Cam Found", "error-text");
     return;
   }
   
+  // Cycle Index
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
   
+  // Show Name
   let camLabel = cameras[currentCamIndex].label || ("Camera " + (currentCamIndex + 1));
   camLabel = camLabel.split('(')[0].trim(); 
   showNotification(camLabel, "info-text");
 
+  // Restart if running
   if (isScanning) {
     scanner.stop().then(() => {
        scanner.clear();
@@ -206,6 +223,7 @@ function switchCamera() {
   }
 }
 
+/* FLASHLIGHT */
 function toggleFlash() {
   const video = document.querySelector("#scanner video");
   if (!video || !video.srcObject) return;
@@ -238,6 +256,7 @@ function updateFlashBtn() {
     }
 }
 
+/* SCAN HANDLER */
 function onScan(code) {
   if (locked) return;
   locked = true;
