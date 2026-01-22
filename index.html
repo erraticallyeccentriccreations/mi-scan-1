@@ -27,7 +27,7 @@
   }
   button.full-width { width: 92%; max-width: 380px; }
   
-  /* Flash button hidden by default */
+  /* Flash button hidden by default in CSS */
   #flash-btn { display: none; }
 
   button:active { opacity: 0.8; transform: scale(0.98); }
@@ -133,7 +133,7 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
 Html5Qrcode.getCameras().then(devices => {
   cameras = devices;
   
-  // LOGIC: Try Camera 4 (Index 3) first
+  // LOGIC: Start on Index 3 (Camera 4)
   if (cameras.length > 3) {
     currentCamIndex = 3; 
   } else if (cameras.length > 0) {
@@ -167,26 +167,14 @@ function startScanner() {
   isFlashOn = false;
   updateFlashBtn();
   
-  // HIDE FLASH BUTTON INITIALLY (Wait for check)
-  document.getElementById("flash-btn").style.display = "none";
+  // Update Flash Visibility IMMEDIATELY based on Index
+  updateFlashVisibility();
 
   scanner.start(startConfig, config, onScan).then(() => {
     isScanning = true;
     const btn = document.getElementById("btn-scan-toggle");
     btn.innerHTML = "⏹ Stop Camera";
     btn.style.background = "#dc3545"; 
-    
-    // --- SMART CAPABILITY CHECK ---
-    // Ask the running camera if it supports 'torch'
-    try {
-        const capabilities = scanner.getRunningTrackCameraCapabilities();
-        if (capabilities.torch) {
-            // Show button if torch exists
-            document.getElementById("flash-btn").style.display = "block"; 
-        }
-    } catch(e) {
-        console.log("Could not check capabilities", e);
-    }
     
     // Notify User
     if(cameras.length > 0) {
@@ -210,7 +198,7 @@ function stopScanner() {
       btn.style.background = "#28a745"; 
       document.getElementById("scanner").style.display = "none";
       
-      // Hide flash button when stopped
+      // Always hide flash when stopped
       document.getElementById("flash-btn").style.display = "none";
       isFlashOn = false;
       updateFlashBtn();
@@ -227,6 +215,9 @@ function switchCamera() {
   // Go to next number
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
   
+  // Check Flash Visibility for new camera
+  updateFlashVisibility();
+  
   // RESTART with new index
   if (isScanning) {
     scanner.stop().then(() => {
@@ -239,6 +230,17 @@ function switchCamera() {
      let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
      showNotification("Selected: " + label.split('(')[0], "info-text");
   }
+}
+
+// --- NEW FUNCTION: STRICT VISIBILITY ---
+function updateFlashVisibility() {
+    // If we are on Index 3, SHOW IT. Else HIDE IT.
+    // (Note: Index is 0-based, so "4th camera" is index 3)
+    if (currentCamIndex === 3) {
+        document.getElementById("flash-btn").style.display = "block";
+    } else {
+        document.getElementById("flash-btn").style.display = "none";
+    }
 }
 
 function toggleFlash() {
