@@ -8,23 +8,25 @@
 
 <style>
 body { margin:0; background:#000; color:#fff; font-family:sans-serif; text-align:center; }
-button {
-  width:90%; max-width:360px;
-  padding:16px; margin:8px;
-  font-size:1.2rem; border:none; border-radius:8px;
+button { 
+  width:90%; max-width:360px; 
+  padding:16px; margin:8px; 
+  font-size:1.2rem; border:none; border-radius:8px; 
+  cursor:pointer;
 }
-#controls { position:fixed; top:0; width:100%; background:#000; z-index:10; padding:10px; }
+button:active { opacity: 0.8; }
+#controls { position:fixed; top:0; width:100%; background:#000; z-index:10; padding:10px; box-sizing:border-box; }
 #scanner { margin-top:240px; display:none; }
-#status { font-size:1.6rem; margin-top:15px; min-height:40px; }
+#status { font-size:1.6rem; margin-top:15px; min-height:40px; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
 <div id="controls">
-  <button onclick="start()">▶ Start Scanning</button>
-  <button onclick="clearInventory()">🧹 Clear Inventory</button>
-  <button onclick="openInventory()">📋 View Inventory</button>
+  <button onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
+  <button onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
+  <button onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
 </div>
 
 <div id="scanner">
@@ -33,20 +35,27 @@ button {
 </div>
 
 <script>
+// --- CONFIGURATION --- //
+
+// Your Google Apps Script Web App URL
 const SCRIPT =
 "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
 
+// The View-Only link for humans
 const INVENTORY =
 "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
 
+// Your NEW Published CSV Link
 const PRODUCTS =
-"https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/export?format=csv&gid=1242803893";
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
+
+// --------------------- //
 
 let products = {};
 let locked = false;
 let scanner;
 
-/* VERY LOUD BEEP */
+/* SOUND EFFECT */
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 function beep() {
   if (ctx.state === "suspended") ctx.resume();
@@ -60,6 +69,7 @@ function beep() {
 
 /* CSV PARSER */
 function parseCSV(t) {
+  // Split by new line, remove header, map rows to array
   return t.trim().split("\n").slice(1).map(r => r.split(","));
 }
 
@@ -68,22 +78,35 @@ fetch(PRODUCTS)
 .then(r => r.text())
 .then(t => {
   parseCSV(t).forEach(r => {
-    const barcode = String(r[0]).trim();
-    const color   = String(r[4]).trim();
-    if (barcode && color) products[barcode] = color;
+    // Column 0 is Barcode, Column 4 is Color
+    if (r.length > 4) {
+      const barcode = String(r[0]).trim();
+      const color   = String(r[4]).trim();
+      if (barcode && color) products[barcode] = color;
+    }
   });
-  document.getElementById("status").textContent = "Ready";
+  document.getElementById("status").textContent = "Ready to Scan";
+})
+.catch(e => {
+  document.getElementById("status").textContent = "Error loading list";
+  console.error(e);
 });
 
-/* START */
+/* START CAMERA */
 function start() {
   document.getElementById("scanner").style.display="block";
+  // If scanner already exists, don't re-init
+  if (scanner) return; 
+  
   scanner = new Html5Qrcode("reader");
   scanner.start(
     { facingMode:"environment" },
-    { fps:30, qrbox:{ width:250, height:100 } },
+    { fps:30, qrbox:{ width:250, height:150 } }, // Increased height slightly for barcodes
     onScan
-  );
+  ).catch(err => {
+    console.log("Camera start error:", err);
+    alert("Camera failed to start. Ensure permissions are granted.");
+  });
 }
 
 /* SCAN HANDLER */
@@ -92,25 +115,39 @@ function onScan(code) {
   locked = true;
 
   code = String(code).trim();
-  const color = products[code] || "UNKNOWN";
+  
+  // 1. Try exact match
+  let color = products[code];
+  
+  // 2. If not found, try adding a leading zero (Fix for 0850... vs 850...)
+  if (!color) {
+    color = products["0" + code];
+  }
+
+  // 3. Fallback
+  color = color || "UNKNOWN";
 
   beep();
 
   document.getElementById("status").textContent =
     `Saved: ${color}`;
 
+  // Send to Google Sheets
   fetch(
     `${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(color)}`,
     { mode:"no-cors" }
   );
 
-  setTimeout(() => locked = false, 900);
+  // Lock for 1.5 seconds to prevent double scanning
+  setTimeout(() => locked = false, 1500);
 }
 
-/* BUTTONS */
+/* BUTTON ACTIONS */
 function clearInventory() {
-  if (confirm("Clear inventory?"))
+  if (confirm("Are you sure you want to clear the inventory?")) {
     fetch(`${SCRIPT}?action=clear`, { mode:"no-cors" });
+    document.getElementById("status").textContent = "Inventory Cleared";
+  }
 }
 
 function openInventory() {
