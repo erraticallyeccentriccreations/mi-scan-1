@@ -78,7 +78,7 @@ let audioCtx = null;
 let isFlashOn = false; 
 let isScanning = false;
 let cameras = [];      
-let currentCamIndex = 0; // Starts STRICTLY at 0
+let currentCamIndex = 0; 
 
 /* SOUND */
 function beep() {
@@ -128,8 +128,14 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
 /* SETUP CAMERAS */
 Html5Qrcode.getCameras().then(devices => {
   cameras = devices;
-  // FORCE ZERO on load
-  currentCamIndex = 0; 
+  
+  // LOGIC: Start with Camera 1 (The second one) if available
+  if (cameras.length > 1) {
+    currentCamIndex = 1; // Skips the first camera (Index 0)
+  } else {
+    currentCamIndex = 0; // Fallback if only 1 camera exists
+  }
+  
 }).catch(err => console.log("Cam error", err));
 
 function toggleScan() {
@@ -151,11 +157,9 @@ function startScanner() {
   const config = { fps: 30, qrbox: { width: 250, height: 100 } };
   
   // Use the specific ID from the list at currentCamIndex
-  // If list is empty, fallback to environment
   const camId = (cameras.length > 0) ? cameras[currentCamIndex].id : null;
   const startConfig = camId ? camId : { facingMode: "environment" };
 
-  // Reset UI
   isFlashOn = false;
   updateFlashBtn();
 
@@ -198,10 +202,8 @@ function switchCamera() {
     return;
   }
   
-  // Just go to next number. Simple.
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
   
-  // RESTART with new index
   if (isScanning) {
     scanner.stop().then(() => {
        scanner.clear();
@@ -209,7 +211,6 @@ function switchCamera() {
        setTimeout(() => { startScanner(); }, 200);
     }).catch(err => { startScanner(); });
   } else {
-     // Just show notification if not scanning
      let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
      showNotification("Selected: " + label.split('(')[0], "info-text");
   }
@@ -219,79 +220,3 @@ function toggleFlash() {
   const video = document.querySelector("#scanner video");
   if (!video || !video.srcObject) return;
   const track = video.srcObject.getVideoTracks()[0];
-  if (!track) return;
-
-  isFlashOn = !isFlashOn;
-
-  track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
-  .then(() => updateFlashBtn())
-  .catch(err => {
-      track.applyConstraints({ torch: isFlashOn })
-      .then(() => updateFlashBtn())
-      .catch(e => {
-         showNotification("Light Blocked", "error-text");
-         isFlashOn = !isFlashOn; 
-         updateFlashBtn();
-      });
-  });
-}
-
-function updateFlashBtn() {
-    const btn = document.getElementById("flash-btn");
-    if (isFlashOn) {
-      btn.innerHTML = "🔦 Light: ON";
-      btn.style.background = "#ffc107"; btn.style.color = "#000";
-    } else {
-      btn.innerHTML = "🔦 Light";
-      btn.style.background = "#555"; btn.style.color = "#fff";
-    }
-}
-
-function onScan(code) {
-  if (locked) return;
-  locked = true;
-  code = clean(code);
-  
-  let item = products[code];
-  if (!item) item = products["0" + code];
-  if (!item && code.startsWith("0")) item = products[code.substring(1)];
-
-  const color    = item ? item.color    : "UNKNOWN";
-  const brand    = item ? item.brand    : "";
-  const material = item ? item.material : "";
-  const type     = item ? item.type     : "";
-
-  beep();
-  showNotification(color, color === "UNKNOWN" ? "error-text" : "success-text");
-
-  const url = `${SCRIPT}?barcode=${encodeURIComponent(code)}` +
-              `&color=${encodeURIComponent(color)}` +
-              `&brand=${encodeURIComponent(brand)}` +
-              `&material=${encodeURIComponent(material)}` +
-              `&type=${encodeURIComponent(type)}`;
-
-  fetch(url, { mode: "no-cors" });
-  
-  setTimeout(() => { locked = false; }, 1500);
-}
-
-function showNotification(msg, cssClass) {
-  const el = document.getElementById("notification");
-  el.textContent = msg;
-  el.style.opacity = "1";
-  el.className = cssClass || "success-text"; 
-  clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => { el.style.opacity = "0"; }, 2000);
-}
-
-function clearInventory() {
-  if (confirm("Clear inventory?")) {
-    fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
-    showNotification("Inventory Cleared", "success-text");
-  }
-}
-function openInventory() { window.open(INVENTORY, "_blank"); }
-let toastTimeout;
-</script>
-</body>
-</html>
