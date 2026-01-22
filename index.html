@@ -8,32 +8,63 @@
 
 <style>
 body { margin:0; background:#000; color:#fff; font-family:sans-serif; text-align:center; }
-button { 
+
+/* MAIN BUTTONS */
+button.main-btn { 
   width:90%; max-width:360px; 
-  padding:16px; margin:8px; 
-  font-size:1.2rem; border:none; border-radius:8px; 
-  cursor:pointer;
+  padding:18px; margin:10px; 
+  font-size:1.3rem; border:none; border-radius:10px; 
+  cursor:pointer; font-weight: bold;
 }
 button:active { opacity: 0.8; }
-#controls { position:fixed; top:0; width:100%; background:#000; z-index:10; padding:10px; box-sizing:border-box; }
-#scanner { margin-top:240px; display:none; }
-#status { font-size:1.4rem; margin-top:15px; min-height:40px; font-weight:bold; white-space: pre-wrap; }
-#debug { font-size: 0.8rem; color: #888; margin-top: 5px; }
+
+#controls { position:fixed; top:0; width:100%; background:#111; z-index:10; padding:15px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+#scanner { margin-top:280px; display:none; }
+#status { margin-top: 20px; font-size: 1.2rem; color: #aaa; }
+
+/* --- POPUP WINDOW STYLES --- */
+#popup {
+  display: none; /* Hidden by default */
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85); /* Dark background overlay */
+  z-index: 100;
+  align-items: center; justify-content: center; flex-direction: column;
+}
+#popup-card {
+  background: #fff; color: #000;
+  width: 85%; max-width: 400px;
+  padding: 30px; border-radius: 15px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+#popup-title { font-size: 1.2rem; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;}
+#popup-result { font-size: 2rem; font-weight: bold; margin-bottom: 25px; color: #007bff; line-height: 1.2;}
+#popup-btn {
+  background: #28a745; color: #fff; border: none; padding: 15px 40px;
+  font-size: 1.5rem; border-radius: 50px; cursor: pointer; width: 100%;
+}
 </style>
 </head>
 
 <body>
 
 <div id="controls">
-  <button onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
-  <button onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
-  <button onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
+  <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
+  <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
+  <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
 </div>
 
 <div id="scanner">
   <div id="reader"></div>
-  <div id="status">Loading products…</div>
-  <div id="debug"></div>
+  <div id="status">Loading products...</div>
+</div>
+
+<div id="popup">
+  <div id="popup-card">
+    <div id="popup-title">Saved</div>
+    <div id="popup-result">Color Name</div>
+    <button id="popup-btn" onclick="closePopup()">OK</button>
+  </div>
 </div>
 
 <script>
@@ -45,8 +76,11 @@ const SCRIPT =
 const INVENTORY =
 "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
 
-const PRODUCTS =
+const PRODUCTS_BASE =
 "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
+
+// Add timestamp to ensure we always get the LATEST data
+const PRODUCTS = PRODUCTS_BASE + "&t=" + Date.now();
 
 // --------------------- //
 
@@ -54,7 +88,7 @@ let products = {};
 let locked = false;
 let scanner;
 
-/* SOUND EFFECT */
+/* SOUND */
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 function beep() {
   if (ctx.state === "suspended") ctx.resume();
@@ -66,8 +100,7 @@ function beep() {
   o.start(); o.stop(ctx.currentTime + 0.15);
 }
 
-/* ROBUST CLEANER */
-// Removes spaces AND quotes (e.g., " 123 " or "123" becomes 123)
+/* DATA CLEANER */
 function clean(str) {
   if (!str) return "";
   str = str.trim();
@@ -81,95 +114,30 @@ function clean(str) {
 fetch(PRODUCTS)
 .then(r => r.text())
 .then(t => {
-  const rows = t.split("\n").slice(1); // Skip header
+  const rows = t.split("\n").slice(1);
   let count = 0;
   
   rows.forEach(row => {
-    // Simple split by comma (assuming no commas INSIDE the color names)
-    // If your CSV has commas inside names, we need a regex parser, but this usually works.
-    const columns = row.split(",");
-    
-    if (columns.length > 4) {
-      // Index 0 = Barcode, Index 4 = Color
-      const barcode = clean(columns[0]);
-      const color   = clean(columns[4]);
-      
+    const cols = row.split(",");
+    if (cols.length > 4) {
+      const barcode = clean(cols[0]);
+      const color   = clean(cols[4]);
       if (barcode && color) {
         products[barcode] = color;
         count++;
       }
     }
   });
-  console.log(`Loaded ${count} products.`);
-  document.getElementById("status").textContent = "Ready to Scan";
+  console.log(`Loaded ${count} items.`);
+  document.getElementById("status").textContent = `Ready (${count} items loaded)`;
 })
 .catch(e => {
-  document.getElementById("status").textContent = "Error loading list";
-  console.error(e);
+  document.getElementById("status").textContent = "Error loading product list.";
 });
 
 /* START CAMERA */
 function start() {
   document.getElementById("scanner").style.display="block";
-  if (scanner) return; 
+  if (scanner) return;
   
-  scanner = new Html5Qrcode("reader");
-  scanner.start(
-    { facingMode:"environment" },
-    { fps:30, qrbox:{ width:250, height:150 } },
-    onScan
-  ).catch(err => {
-    alert("Camera failed. Check permissions.");
-  });
-}
-
-/* SCAN HANDLER */
-function onScan(code) {
-  if (locked) return;
-  locked = true;
-
-  // 1. Clean the scanned code
-  code = clean(String(code));
-  
-  // 2. Try strict match
-  let color = products[code];
-  
-  // 3. Try "Zero Correction" (Scanner reads 850, CSV has 0850)
-  if (!color) color = products["0" + code];
-  
-  // 4. Try "Reverse Zero Correction" (Scanner reads 0850, CSV has 850)
-  if (!color && code.startsWith("0")) color = products[code.substring(1)];
-
-  // Fallback
-  const displayColor = color || "UNKNOWN";
-  
-  beep();
-
-  // Show status with Debug info if unknown
-  const debugText = (displayColor === "UNKNOWN") ? `\n(Code: ${code})` : "";
-  document.getElementById("status").textContent = `Saved: ${displayColor}${debugText}`;
-
-  // Send to Google Sheets
-  // We send the FOUND color (or UNKNOWN) to the sheet
-  fetch(
-    `${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`,
-    { mode:"no-cors" }
-  );
-
-  setTimeout(() => locked = false, 1500);
-}
-
-/* BUTTONS */
-function clearInventory() {
-  if (confirm("Clear inventory?")) {
-    fetch(`${SCRIPT}?action=clear`, { mode:"no-cors" });
-    document.getElementById("status").textContent = "Inventory Cleared";
-  }
-}
-
-function openInventory() {
-  window.open(INVENTORY, "_blank");
-}
-</script>
-</body>
-</html>
+  scanner = new Html5Qrcode("reader
