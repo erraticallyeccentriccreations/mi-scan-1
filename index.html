@@ -7,78 +7,42 @@
 
 <style>
   body { 
-    margin: 0; 
-    background: #000; 
-    color: #fff; 
-    font-family: sans-serif; 
-    text-align: center;
-    padding-bottom: 250px; 
+    margin: 0; background: #000; color: #fff; font-family: sans-serif; 
+    text-align: center; padding-bottom: 220px; 
   }
 
   /* BUTTON STYLES */
   #controls { 
-    position: fixed; 
-    bottom: 0; 
-    left: 0; 
-    width: 100%; 
-    background: #000; 
-    z-index: 1000; 
-    padding: 10px 0; 
+    position: fixed; bottom: 0; left: 0; width: 100%; 
+    background: #000; z-index: 1000; padding: 10px 0; 
     border-top: 1px solid #333;
     padding-bottom: env(safe-area-inset-bottom);
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
   }
 
   button.main-btn { 
-    width: 90%; 
-    max-width: 360px; 
-    padding: 14px; 
-    margin: 6px auto; 
-    font-size: 1.1rem; 
-    border: none; 
-    border-radius: 10px; 
-    cursor: pointer; 
-    font-weight: bold; 
-    display: block;
+    width: 45%; max-width: 180px; /* 2 buttons per row */
+    padding: 12px; font-size: 1rem; border: none; 
+    border-radius: 8px; cursor: pointer; font-weight: bold; 
   }
+  button.full-width { width: 92%; max-width: 380px; }
+  
   button:active { opacity: 0.8; transform: scale(0.98); }
 
   /* SCANNER POSITION */
-  #scanner { 
-    width: 100%;
-    margin-top: 0; 
-    display: none; 
-    position: relative;
-    z-index: 1;
-  }
-  
-  #status { 
-    margin-top: 10px; 
-    font-size: 1.1rem; 
-    color: #aaa; 
-    position: relative; 
-    z-index: 5;
-  }
+  #scanner { width: 100%; margin-top: 0; display: none; position: relative; z-index: 1; }
+  #status { margin-top: 10px; font-size: 1.1rem; color: #aaa; z-index: 5; }
 
   /* NOTIFICATIONS */
   #notification {
-    position: fixed;
-    top: 30px; 
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    font-size: 2.5rem; 
-    font-weight: bold;
-    text-align: center;
-    opacity: 0;
-    transition: opacity 0.2s ease-in-out;
-    pointer-events: none; 
-    z-index: 2000; 
-    text-shadow: 0px 3px 8px rgba(0,0,0,1);
+    position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
+    width: 100%; font-size: 2.5rem; font-weight: bold; text-align: center;
+    opacity: 0; transition: opacity 0.2s ease-in-out; pointer-events: none; 
+    z-index: 2000; text-shadow: 0px 3px 8px rgba(0,0,0,1);
   }
   
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
-  .info-text    { color: #ffc107; font-size: 1.5rem; } 
 
 </style>
 </head>
@@ -93,11 +57,13 @@
 </div>
 
 <div id="controls">
-  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light: OFF</button>
+  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light</button>
+  <button class="main-btn" onclick="switchCamera()" style="background:#6f42c1; color:#fff;">📷 Switch Cam</button>
   
-  <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
-  <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
-  <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
+  <button class="main-btn full-width" onclick="start()" style="background:#28a745; color:#fff;">▶ Start / Restart</button>
+  
+  <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear</button>
+  <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View</button>
 </div>
 
 <script>
@@ -112,8 +78,10 @@ let scanner;
 let locked = false;
 let audioCtx = null;
 let isFlashOn = false; 
+let cameras = [];      // List of available cameras
+let currentCamIndex = 0;
 
-/* SOUND FUNCTION */
+/* SOUND */
 function beep() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -127,7 +95,7 @@ function beep() {
   } catch (e) { console.log("Audio silent"); }
 }
 
-/* DATA CLEANER */
+/* CLEANER */
 function clean(str) {
   if (!str) return "";
   str = String(str).trim();
@@ -135,9 +103,9 @@ function clean(str) {
   return str.trim();
 }
 
-/* LOAD PRODUCTS */
+/* LOAD DATA */
 fetch(PRODUCTS_URL + "&t=" + Date.now())
-  .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+  .then(r => r.text())
   .then(t => {
     const rows = t.split("\n").slice(1);
     let count = 0;
@@ -149,96 +117,110 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
         if (barcode) { products[barcode] = color; count++; }
       }
     });
-    console.log("Loaded:", count);
     document.getElementById("status").textContent = `Ready (${count} products)`;
-  })
-  .catch(e => { document.getElementById("status").textContent = "Error loading list."; });
+  });
+
+/* SETUP CAMERAS */
+Html5Qrcode.getCameras().then(devices => {
+  if (devices && devices.length) {
+    cameras = devices;
+    // Try to find a "back" camera to start with
+    const backCam = cameras.findIndex(c => c.label.toLowerCase().includes('back'));
+    if (backCam !== -1) currentCamIndex = backCam;
+  }
+}).catch(err => console.log("Cam error", err));
 
 /* START CAMERA */
 function start() {
   document.getElementById("scanner").style.display = "block";
-  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
-  if (scanner) return; 
-
-  try {
-    scanner = new Html5Qrcode("reader");
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 30, qrbox: { width: 250, height: 100 } },
-      onScan
-    ).catch(err => alert("Camera Error: " + err));
-  } catch (err) { alert("Scanner library failed."); }
+  if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
+  
+  if (cameras.length === 0) {
+    // If no camera list (permission issue?), try generic start
+    initScanner({ facingMode: "environment" });
+  } else {
+    // Start specific camera ID
+    initScanner(cameras[currentCamIndex].id);
+  }
 }
 
-/* FLASHLIGHT TOGGLE: SEQUENTIAL FALLBACK */
+function initScanner(cameraIdOrConfig) {
+  if (scanner) {
+     // If already running, stop it first
+     scanner.stop().then(() => {
+        scanner.clear();
+        createAndStart(cameraIdOrConfig);
+     }).catch(err => {
+        scanner.clear();
+        createAndStart(cameraIdOrConfig);
+     });
+  } else {
+    createAndStart(cameraIdOrConfig);
+  }
+}
+
+function createAndStart(idOrConfig) {
+  scanner = new Html5Qrcode("reader");
+  const config = { fps: 30, qrbox: { width: 250, height: 100 } };
+  
+  // Reset Flash state
+  isFlashOn = false;
+  updateFlashBtn();
+
+  scanner.start(idOrConfig, config, onScan)
+  .catch(err => {
+    alert("Start Failed: " + err);
+  });
+}
+
+/* SWITCH CAMERA */
+function switchCamera() {
+  if (cameras.length < 2) {
+    showNotification("Only 1 Cam Found", "error-text");
+    return;
+  }
+  // Cycle index
+  currentCamIndex = (currentCamIndex + 1) % cameras.length;
+  // Restart with new ID
+  start();
+  showNotification("Switched Camera", "success-text");
+}
+
+/* FLASHLIGHT LOGIC (FORCE) */
 function toggleFlash() {
   const video = document.querySelector("#scanner video");
-  if (!video || !video.srcObject) {
-    showNotification("Start Camera First", "info-text");
-    return;
-  }
+  if (!video || !video.srcObject) return;
   
   const track = video.srcObject.getVideoTracks()[0];
-  if (!track) {
-    showNotification("No Camera Track", "info-text");
-    return;
-  }
+  if (!track) return;
 
   isFlashOn = !isFlashOn;
 
-  // --- METHOD 1: Advanced Constraint (Standard) ---
+  // Try standard constraint
   track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
-  .then(() => updateFlashBtn(true))
-  .catch(err1 => {
-      console.log("Method 1 (Advanced) Failed:", err1);
-      
-      // --- METHOD 2: Basic Constraint (Samsung/Legacy) ---
+  .then(() => updateFlashBtn())
+  .catch(err => {
+      // Try legacy constraint if standard fails
       track.applyConstraints({ torch: isFlashOn })
-      .then(() => updateFlashBtn(true))
-      .catch(err2 => {
-           console.log("Method 2 (Basic) Failed:", err2);
-
-           // --- METHOD 3: ImageCapture (Chrome Android) ---
-           try {
-             if (window.ImageCapture) {
-               const imageCapture = new ImageCapture(track);
-               // 'fillLightMode' uses 'flash' or 'off' (sometimes 'torch')
-               imageCapture.setOptions({ fillLightMode: isFlashOn ? "flash" : "off" })
-               .then(() => updateFlashBtn(true))
-               .catch(err3 => failFlash(err3));
-             } else {
-               failFlash(err2);
-             }
-           } catch(e) {
-             failFlash(e);
-           }
+      .then(() => updateFlashBtn())
+      .catch(e => {
+         // If all fails, show error but keep button ON state to show we tried
+         console.log(e);
+         showNotification("Light Blocked", "error-text");
+         isFlashOn = !isFlashOn; // Revert
+         updateFlashBtn();
       });
   });
 }
 
-function failFlash(error) {
-    console.log("All methods failed:", error);
-    isFlashOn = !isFlashOn; // Revert state because it failed
-    updateFlashBtn(false);
-    
-    // Friendly error
-    let msg = "Flash Not Supported";
-    if (error.name === "OverconstrainedError") msg = "Flash Blocked by Device";
-    if (error.name === "NotAllowedError") msg = "Permission Denied";
-    
-    showNotification(msg, "error-text");
-}
-
-function updateFlashBtn(success) {
+function updateFlashBtn() {
     const btn = document.getElementById("flash-btn");
     if (isFlashOn) {
       btn.innerHTML = "🔦 Light: ON";
-      btn.style.background = "#ffc107"; // Yellow
-      btn.style.color = "#000";
+      btn.style.background = "#ffc107"; btn.style.color = "#000";
     } else {
-      btn.innerHTML = "🔦 Light: OFF";
-      btn.style.background = "#555"; // Gray
-      btn.style.color = "#fff";
+      btn.innerHTML = "🔦 Light";
+      btn.style.background = "#555"; btn.style.color = "#fff";
     }
 }
 
@@ -247,21 +229,16 @@ function onScan(code) {
   if (locked) return;
   locked = true;
   code = clean(code);
-  
   let color = products[code];
   if (!color) color = products["0" + code];
   if (!color && code.startsWith("0")) color = products[code.substring(1)];
-
   const displayColor = color || "UNKNOWN";
   beep();
   showNotification(displayColor, displayColor === "UNKNOWN" ? "error-text" : "success-text");
-
   fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`, { mode: "no-cors" });
   setTimeout(() => { locked = false; }, 1500);
 }
 
-/* NOTIFICATION HELPER */
-let toastTimeout;
 function showNotification(msg, cssClass) {
   const el = document.getElementById("notification");
   el.textContent = msg;
@@ -271,7 +248,6 @@ function showNotification(msg, cssClass) {
   toastTimeout = setTimeout(() => { el.style.opacity = "0"; }, 2000);
 }
 
-/* BUTTONS */
 function clearInventory() {
   if (confirm("Clear inventory?")) {
     fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
@@ -279,6 +255,7 @@ function clearInventory() {
   }
 }
 function openInventory() { window.open(INVENTORY, "_blank"); }
+let toastTimeout;
 </script>
 </body>
 </html>
