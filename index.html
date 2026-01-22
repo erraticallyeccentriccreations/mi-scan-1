@@ -3,7 +3,7 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scanner</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 
 <style>
   body { 
@@ -26,7 +26,8 @@
     z-index: 1000; /* Super high priority */
     padding: 15px 0; 
     border-top: 1px solid #333;
-    padding-bottom: env(safe-area-inset-bottom); /* Fix for iPhone X+ home bar */
+    /* Fix for iPhone Home Bar area */
+    padding-bottom: env(safe-area-inset-bottom); 
   }
 
   button.main-btn { 
@@ -44,7 +45,6 @@
   button:active { opacity: 0.8; transform: scale(0.98); }
 
   /* SCANNER POSITION */
-  /* Moved to the very top with 0 margin */
   #scanner { 
     width: 100%;
     margin-top: 0; 
@@ -65,7 +65,7 @@
   /* FLOATING TEXT NOTIFICATION */
   #notification {
     position: fixed;
-    top: 20px; /* High up */
+    top: 30px; /* High up */
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
@@ -138,7 +138,10 @@ function clean(str) {
 
 /* LOAD PRODUCTS */
 fetch(PRODUCTS_URL + "&t=" + Date.now())
-  .then(r => r.text())
+  .then(r => {
+    if (!r.ok) throw new Error("HTTP " + r.status); // Check for 404 on the sheet itself
+    return r.text();
+  })
   .then(t => {
     const rows = t.split("\n").slice(1);
     let count = 0;
@@ -157,7 +160,8 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     document.getElementById("status").textContent = `Ready (${count} products loaded)`;
   })
   .catch(e => {
-    document.getElementById("status").textContent = "Error loading product list.";
+    document.getElementById("status").textContent = "Error loading product list (404 or Network)";
+    console.error(e);
   });
 
 /* START CAMERA */
@@ -167,12 +171,16 @@ function start() {
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
   if (scanner) return; 
 
-  scanner = new Html5Qrcode("reader");
-  scanner.start(
-    { facingMode: "environment" },
-    { fps: 30, qrbox: { width: 250, height: 100 } },
-    onScan
-  ).catch(err => alert("Camera Error: " + err));
+  try {
+    scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 30, qrbox: { width: 250, height: 100 } },
+      onScan
+    ).catch(err => alert("Camera Error: " + err));
+  } catch (err) {
+    alert("Scanner library failed to load. Check internet.");
+  }
 }
 
 /* SCAN HANDLER */
@@ -204,6 +212,7 @@ function showNotification(msg) {
   el.textContent = msg;
   el.style.opacity = "1";
   
+  // Green text for success, Red for unknown
   el.className = (msg === "UNKNOWN") ? "error-text" : "success-text";
 
   clearTimeout(toastTimeout);
