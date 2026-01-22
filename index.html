@@ -6,64 +6,90 @@
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
-  body { margin:0; background:#000; color:#fff; font-family:sans-serif; text-align:center; }
+  body { 
+    margin: 0; 
+    background: #000; 
+    color: #fff; 
+    font-family: sans-serif; 
+    text-align: center; 
+    padding-bottom: 160px; /* Space for bottom buttons */
+  }
 
-  /* BUTTON STYLES */
+  /* BUTTON STYLES (Now at Bottom) */
+  #controls { 
+    position: fixed; 
+    bottom: 0; 
+    left: 0; 
+    width: 100%; 
+    background: #000; /* Solid background so buttons are readable */
+    z-index: 10; 
+    padding: 15px 0; 
+    border-top: 1px solid #333;
+  }
+
   button.main-btn { 
-    width:90%; max-width:360px; 
-    padding:18px; margin:10px auto; 
-    font-size:1.3rem; border:none; border-radius:10px; 
-    cursor:pointer; font-weight: bold; display: block;
+    width: 90%; 
+    max-width: 360px; 
+    padding: 16px; 
+    margin: 8px auto; 
+    font-size: 1.2rem; 
+    border: none; 
+    border-radius: 10px; 
+    cursor: pointer; 
+    font-weight: bold; 
+    display: block;
   }
   button:active { opacity: 0.8; transform: scale(0.98); }
 
-  #controls { 
-    position:fixed; top:0; left:0; width:100%; 
-    background:#000; z-index:10; padding:10px 0; 
+  /* SCANNER POSITION (Now at Top) */
+  #scanner { 
+    margin-top: 20px; /* Small gap at top */
+    display: none; 
+  }
+  
+  #status { 
+    margin-top: 15px; 
+    font-size: 1.2rem; 
+    color: #aaa; 
   }
 
-  /* Scanner Position */
-  #scanner { margin-top:240px; display:none; }
-  
-  #status { margin-top: 15px; font-size: 1.2rem; color: #aaa; }
-
-  /* FLOATING TEXT (No Background) */
+  /* FLOATING TEXT NOTIFICATION */
   #notification {
     position: fixed;
-    top: 180px; /* Positioned above scanner */
+    top: 50px; /* Sits near the top, over the camera */
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
-    font-size: 2.5rem; /* Big Text */
+    font-size: 2.5rem; 
     font-weight: bold;
     text-align: center;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
     pointer-events: none;
     z-index: 100;
-    text-shadow: 0px 2px 5px rgba(0,0,0,1); /* Shadow for contrast */
+    text-shadow: 0px 2px 5px rgba(0,0,0,1);
   }
   
   /* Text Colors */
-  .success-text { color: #00ff00; } /* Bright Green */
-  .error-text   { color: #ff3333; } /* Red (for unknown) */
+  .success-text { color: #00ff00; } 
+  .error-text   { color: #ff3333; } 
 
 </style>
 </head>
 
 <body>
 
-<div id="controls">
-  <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
-  <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
-  <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
-</div>
-
 <div id="notification"></div>
 
 <div id="scanner">
   <div id="reader"></div>
   <div id="status">Loading data...</div>
+</div>
+
+<div id="controls">
+  <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
+  <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
+  <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
 </div>
 
 <script>
