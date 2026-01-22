@@ -11,7 +11,7 @@
     text-align: center; padding-bottom: 220px; 
   }
 
-  /* BUTTON STYLES */
+  /* CONTROLS LAYOUT */
   #controls { 
     position: fixed; bottom: 0; left: 0; width: 100%; 
     background: #000; z-index: 1000; padding: 10px 0; 
@@ -29,11 +29,9 @@
   
   button:active { opacity: 0.8; transform: scale(0.98); }
 
-  /* SCANNER POSITION */
   #scanner { width: 100%; margin-top: 0; display: none; position: relative; z-index: 1; }
   #status { margin-top: 10px; font-size: 1.1rem; color: #aaa; z-index: 5; }
 
-  /* NOTIFICATIONS */
   #notification {
     position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
     width: 90%; font-size: 2rem; font-weight: bold; text-align: center;
@@ -44,7 +42,7 @@
   
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
-  .info-text    { color: #007bff; font-size: 1.5rem; } 
+  .info-text    { color: #007bff; font-size: 1.5rem; }
 
 </style>
 </head>
@@ -80,7 +78,7 @@ let audioCtx = null;
 let isFlashOn = false; 
 let isScanning = false;
 let cameras = [];      
-let currentCamIndex = 0;
+let currentCamIndex = 0; // Starts STRICTLY at 0
 
 /* SOUND */
 function beep() {
@@ -96,7 +94,6 @@ function beep() {
   } catch (e) { console.log("Audio silent"); }
 }
 
-/* CLEANER */
 function clean(str) {
   if (!str) return "";
   str = String(str).trim();
@@ -128,24 +125,11 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     document.getElementById("status").textContent = `Ready (${count} products)`;
   });
 
-/* SETUP CAMERAS (SEARCH FOR BACK) */
+/* SETUP CAMERAS */
 Html5Qrcode.getCameras().then(devices => {
-  if (devices && devices.length) {
-    cameras = devices;
-    
-    // Default to the last camera (often back on Android if list is inverted)
-    currentCamIndex = cameras.length - 1;
-
-    // Try to find one explicitly labeled "back" or "environment"
-    for (let i = 0; i < cameras.length; i++) {
-        let label = cameras[i].label.toLowerCase();
-        if (label.includes("back") || label.includes("environment")) {
-            currentCamIndex = i;
-            break; // Found it, stop looking
-        }
-    }
-    console.log("Selected Default Cam Index:", currentCamIndex);
-  }
+  cameras = devices;
+  // FORCE ZERO on load
+  currentCamIndex = 0; 
 }).catch(err => console.log("Cam error", err));
 
 function toggleScan() {
@@ -160,37 +144,36 @@ function startScanner() {
   document.getElementById("scanner").style.display = "block";
   if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
   
-  let camId = null;
-  if (cameras.length > 0) {
-    camId = cameras[currentCamIndex].id;
-  }
-  
   if (!scanner) {
     scanner = new Html5Qrcode("reader");
   }
 
   const config = { fps: 30, qrbox: { width: 250, height: 100 } };
   
+  // Use the specific ID from the list at currentCamIndex
+  // If list is empty, fallback to environment
+  const camId = (cameras.length > 0) ? cameras[currentCamIndex].id : null;
+  const startConfig = camId ? camId : { facingMode: "environment" };
+
+  // Reset UI
   isFlashOn = false;
   updateFlashBtn();
 
-  // If we have an ID, use it.
-  const startPromise = camId ? scanner.start(camId, config, onScan) : scanner.start({ facingMode: "environment" }, config, onScan);
-
-  startPromise.then(() => {
+  scanner.start(startConfig, config, onScan).then(() => {
     isScanning = true;
     const btn = document.getElementById("btn-scan-toggle");
     btn.innerHTML = "⏹ Stop Camera";
-    btn.style.background = "#dc3545"; // Red
+    btn.style.background = "#dc3545"; 
     
-    // Show user which camera started
+    // Notify User
     if(cameras.length > 0) {
-        let label = cameras[currentCamIndex].label;
-        showNotification("Started: " + label.split('(')[0], "info-text");
+       let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
+       label = label.split('(')[0].trim();
+       showNotification("Active: " + label, "info-text");
     }
   }).catch(err => {
     console.error(err);
-    alert("Camera failed to start. Refresh page.");
+    alert("Start Failed: " + err);
   });
 }
 
@@ -201,7 +184,7 @@ function stopScanner() {
       isScanning = false;
       const btn = document.getElementById("btn-scan-toggle");
       btn.innerHTML = "▶ Start Scanning";
-      btn.style.background = "#28a745"; // Green
+      btn.style.background = "#28a745"; 
       document.getElementById("scanner").style.display = "none";
       isFlashOn = false;
       updateFlashBtn();
@@ -215,18 +198,20 @@ function switchCamera() {
     return;
   }
   
+  // Just go to next number. Simple.
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
   
-  let camLabel = cameras[currentCamIndex].label || ("Camera " + (currentCamIndex + 1));
-  camLabel = camLabel.split('(')[0].trim(); 
-  showNotification(camLabel, "info-text");
-
+  // RESTART with new index
   if (isScanning) {
     scanner.stop().then(() => {
        scanner.clear();
        isScanning = false;
        setTimeout(() => { startScanner(); }, 200);
     }).catch(err => { startScanner(); });
+  } else {
+     // Just show notification if not scanning
+     let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
+     showNotification("Selected: " + label.split('(')[0], "info-text");
   }
 }
 
