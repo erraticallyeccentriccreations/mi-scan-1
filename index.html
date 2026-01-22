@@ -75,75 +75,34 @@ button {
 
 <div id="scanner-container" style="display:none;">
     <div id="reader"></div>
-    <div id="status" class="idle">Ready...</div>
+    <div id="status" class="idle">Loading products…</div>
 </div>
 
 <script>
+/* =============================
+   CONFIG
+============================= */
+
 const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
 
 const INVENTORY_URL =
   "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit#gid=0";
 
-let lastCode = null;
-let lastTime = 0;
-let scanner;
+/* CSV export of Products sheet */
+const PRODUCTS_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/export?format=csv&gid=0";
 
-function startScanner() {
-    document.getElementById("start-btn").style.display = "none";
-    document.getElementById("clear-btn").style.display = "none";
-    document.getElementById("view-btn").style.display = "none";
-    document.getElementById("scanner-container").style.display = "block";
+/* =============================
+   PRODUCT CACHE
+============================= */
 
-    scanner = new Html5QrcodeScanner("reader", {
-        fps: 30,
-        qrbox: { width: 250, height: 100 },
-        formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.CODE_39
-        ],
-        videoConstraints: { facingMode: "environment" }
-    });
+const productMap = {}; // barcode -> color
 
-    scanner.render(onScanSuccess, () => {});
-}
-
-function onScanSuccess(code) {
-    const now = Date.now();
-    if (code === lastCode && now - lastTime < 1000) return;
-
-    lastCode = code;
-    lastTime = now;
-
-    // FIRE AND FORGET — NO CORS READ
-    fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(code)}`, {
-        mode: "no-cors"
-    });
-
-    // UI feedback (color will be added next step)
-    const status = document.getElementById("status");
-    status.textContent = "SAVED";
-    status.className = "success";
-
-    setTimeout(() => {
-        status.textContent = "Ready...";
-        status.className = "idle";
-    }, 1200);
-}
-
-function clearInventory() {
-    if (!confirm("Clear entire inventory?")) return;
-
-    fetch(`${SCRIPT_URL}?action=clear`, { mode: "no-cors" });
-    alert("Inventory cleared");
-}
-
-function viewInventory() {
-    window.open(INVENTORY_URL, "_blank");
-}
-</script>
-
-</body>
-</html>
+fetch(PRODUCTS_CSV_URL)
+    .then(r => r.text())
+    .then(csv => {
+        const lines = csv.split("\n").slice(1);
+        lines.forEach(line => {
+            const cols = line.split(",");
+            const barc
