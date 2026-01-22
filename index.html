@@ -170,37 +170,54 @@ function start() {
   } catch (err) { alert("Scanner library failed."); }
 }
 
-/* FORCE FLASHLIGHT TOGGLE (No Permission Checks) */
+/* "TRY EVERYTHING" FLASHLIGHT TOGGLE */
 function toggleFlash() {
-  // 1. Get the video element directly
   const video = document.querySelector("#scanner video");
   if (!video || !video.srcObject) {
     showNotification("Start Camera First", "info-text");
     return;
   }
-
-  // 2. Get the video track
+  
   const track = video.srcObject.getVideoTracks()[0];
   if (!track) {
     showNotification("No Camera Track", "info-text");
     return;
   }
 
-  // 3. FORCE TOGGLE (Skipping getCapabilities check)
   isFlashOn = !isFlashOn;
 
-  track.applyConstraints({
-    advanced: [{ torch: isFlashOn }]
-  })
-  .then(() => {
-    updateFlashBtn();
-  })
-  .catch(err => {
-    // If it *really* fails, log it and revert
-    console.log("Force flash failed:", err);
-    isFlashOn = !isFlashOn;
-    showNotification("Light Failed", "error-text");
+  // METHOD 1: Standard Advanced Constraint (iOS/Modern Android)
+  track.applyConstraints({ advanced: [{ torch: isFlashOn }] })
+  .then(() => updateFlashBtn(true))
+  .catch(err1 => {
+      console.log("Method 1 failed:", err1);
+      
+      // METHOD 2: Legacy Constraint (Older Android)
+      track.applyConstraints({ torch: isFlashOn })
+      .then(() => updateFlashBtn(true))
+      .catch(err2 => {
+           console.log("Method 2 failed:", err2);
+
+           // METHOD 3: ImageCapture API (Specific for Android Chrome)
+           try {
+             const imageCapture = new ImageCapture(track);
+             imageCapture.getPhotoCapabilities().then(() => {
+                imageCapture.setOptions({ fillLightMode: isFlashOn ? "flash" : "off" })
+                .then(() => updateFlashBtn(true))
+                .catch(err3 => failFlash(err3));
+             }).catch(err3 => failFlash(err3));
+           } catch(e) {
+             failFlash(e);
+           }
+      });
   });
+}
+
+function failFlash(error) {
+    console.log("All methods failed:", error);
+    isFlashOn = !isFlashOn; // Revert state
+    // Display the specific error name to help debug
+    showNotification("Blocked: " + (error.name || "Unknown"), "error-text");
 }
 
 function updateFlashBtn() {
