@@ -129,13 +129,11 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
 Html5Qrcode.getCameras().then(devices => {
   cameras = devices;
   
-  // LOGIC: Try Camera 2 (Third one) first
-  if (cameras.length > 2) {
-    currentCamIndex = 2; // Try the 3rd camera
-  } else if (cameras.length > 1) {
-    currentCamIndex = 1; // Fallback to 2nd
-  } else {
-    currentCamIndex = 0; // Fallback to 1st
+  // LOGIC: Try Camera 4 (Index 3) first
+  if (cameras.length > 3) {
+    currentCamIndex = 3; // Try the 4th camera
+  } else if (cameras.length > 0) {
+    currentCamIndex = cameras.length - 1; // Fallback to last available
   }
   
 }).catch(err => console.log("Cam error", err));
