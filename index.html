@@ -116,7 +116,7 @@
     
     <div class="form-group">
         <label>Type</label>
-        <select id="sel-type" onchange="checkNew('type')"></select>
+        <select id="sel-type" onchange="onTypeChange()"></select>
         <div id="inp-type-wrap" class="new-input-wrapper" style="display:none;">
             <input type="text" id="inp-type"><button class="ok-btn" onclick="confirmNew('type')">OK</button>
         </div>
@@ -151,9 +151,10 @@ const INVENTORY = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8
 const PRODUCTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
 
 let products = {};
-// New structure to link Material -> Types
+// Data Maps for Filtering
 let uniqueData = { brands: new Set(), materials: new Set(), types: new Set(), colors: new Set() };
-let typesByMaterial = {}; // { "PLA": Set("Matte", "Silk"), "PETG": Set("Standard") }
+let typesByMaterial = {}; // { "PLA": Set("Matte", "Silk") }
+let colorsByMatType = {}; // { "PLA|Silk": Set("Red", "Blue") }
 
 let scanner = null;
 let locked = false;
@@ -176,16 +177,22 @@ fetch(PRODUCTS_URL + "&t=" + Date.now()).then(r => r.text()).then(t => {
           products[barcode] = { brand, material, type, color };
           count++; 
           
-          if(brand) uniqueData.brands.add(brand); 
+          if(brand) uniqueData.brands.add(brand);
+          if(material) uniqueData.materials.add(material);
+          if(type) uniqueData.types.add(type);
           if(color) uniqueData.colors.add(color);
-          
+
+          // Build Filters
           if(material) {
-              uniqueData.materials.add(material);
-              // Map Material to Type
-              if (!typesByMaterial[material]) typesByMaterial[material] = new Set();
-              if (type) typesByMaterial[material].add(type);
+             if (!typesByMaterial[material]) typesByMaterial[material] = new Set();
+             if (type) {
+                 typesByMaterial[material].add(type);
+                 // Build Color Map (Material + Type)
+                 const key = material + "|" + type;
+                 if (!colorsByMatType[key]) colorsByMatType[key] = new Set();
+                 if (color) colorsByMatType[key].add(color);
+             }
           }
-          if(type) uniqueData.types.add(type); // Keep global list just in case
         }
       }
     });
@@ -220,18 +227,17 @@ function openAddForm() {
   const code = document.getElementById("unknown-code-display").textContent;
   document.getElementById("new-barcode").value = code;
 
-  // Reset Input Wrappers to be hidden
   document.querySelectorAll('.new-input-wrapper').forEach(el => el.style.display = 'none');
   document.querySelectorAll('select').forEach(el => el.style.display = 'block');
 
   populateSelect("sel-brand", uniqueData.brands);
   populateSelect("sel-material", uniqueData.materials);
-  // Type is empty until Material is picked
+  // Reset dependents
   populateSelect("sel-type", new Set()); 
-  populateSelect("sel-color", uniqueData.colors);
+  populateSelect("sel-color", new Set());
 }
 
-// --- DROPDOWN LOGIC ---
+// --- DROPDOWN & FILTER LOGIC ---
 function populateSelect(id, set) {
   const sel = document.getElementById(id);
   sel.innerHTML = "<option value='' disabled selected>Select...</option>";
@@ -251,33 +257,41 @@ function populateSelect(id, set) {
   });
 }
 
-// NEW: Handle Material Change -> Filter Types
 function onMaterialChange() {
-    const matSel = document.getElementById("sel-material");
-    const selectedMat = matSel.value;
-
-    // First check if they selected "NEW"
+    const mat = document.getElementById("sel-material").value;
     checkNew('material');
+    
+    // Filter Type
+    if (mat && mat !== "NEW") {
+        const types = typesByMaterial[mat] || new Set();
+        populateSelect("sel-type", types);
+    } else if (mat === "NEW") {
+        populateSelect("sel-type", uniqueData.types);
+    }
+    // Clear Color until Type is picked
+    populateSelect("sel-color", new Set());
+}
 
-    // If it's a real material, filter the types
-    if (selectedMat && selectedMat !== "NEW") {
-        const validTypes = typesByMaterial[selectedMat] || new Set();
-        populateSelect("sel-type", validTypes);
-    } 
-    // If they picked "NEW" (and text box is showing), or nothing, show full list or empty
-    else if (selectedMat === "NEW") {
-        populateSelect("sel-type", uniqueData.types); // Allow any type if material is new
+function onTypeChange() {
+    const mat = document.getElementById("sel-material").value;
+    const type = document.getElementById("sel-type").value;
+    checkNew('type');
+
+    // Filter Color based on Mat + Type
+    if (mat && type && mat !== "NEW" && type !== "NEW") {
+        const key = mat + "|" + type;
+        const colors = colorsByMatType[key] || new Set();
+        populateSelect("sel-color", colors);
+    } else if (type === "NEW") {
+        populateSelect("sel-color", uniqueData.colors);
     }
 }
 
 function checkNew(field) {
   const sel = document.getElementById("sel-" + field);
   const wrap = document.getElementById("inp-" + field + "-wrap");
-  
   if (sel.value === "NEW") {
-    sel.style.display = "none"; 
-    wrap.style.display = "flex"; 
-    document.getElementById("inp-" + field).focus();
+    sel.style.display = "none"; wrap.style.display = "flex"; document.getElementById("inp-" + field).focus();
   }
 }
 
@@ -293,11 +307,9 @@ function confirmNew(field) {
     sel.appendChild(opt);
     sel.value = newVal;
     
-    // If we just created a new Material, we need to handle the Type filter
-    if (field === 'material') {
-        // New material has no linked types yet, so show all options or empty
-        populateSelect("sel-type", uniqueData.types);
-    }
+    // Reflow filters if needed
+    if(field === 'material') populateSelect("sel-type", uniqueData.types);
+    if(field === 'type') populateSelect("sel-color", uniqueData.colors);
   } else {
     sel.selectedIndex = 0; 
   }
@@ -315,12 +327,15 @@ function saveNewProduct() {
     alert("Please fill in all fields."); return;
   }
 
+  // Update Local Maps
   products[barcode] = { brand, material, type, color };
-
-  // Update local mappings for next time
   if(!typesByMaterial[material]) typesByMaterial[material] = new Set();
   typesByMaterial[material].add(type);
+  const key = material + "|" + type;
+  if(!colorsByMatType[key]) colorsByMatType[key] = new Set();
+  colorsByMatType[key].add(color);
 
+  // Send to Apps Script (Action: add_product + Add Inventory)
   const url = `${SCRIPT}?action=add_product` +
               `&barcode=${encodeURIComponent(barcode)}` +
               `&brand=${encodeURIComponent(brand)}` +
@@ -330,11 +345,11 @@ function saveNewProduct() {
   
   fetch(url, { mode: "no-cors" });
   
-  showNotification("Product Added!", "success-text");
+  showNotification("Added to Inventory!", "success-text");
   closeModals();
 }
 
-// --- 3. SCANNER LOGIC ---
+// --- 3. SCANNER LOGIC (Camera 4 Default) ---
 Html5Qrcode.getCameras().then(devices => {
   cameras = devices;
   if (cameras.length > 3) currentCamIndex = 3; 
