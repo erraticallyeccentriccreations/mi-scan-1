@@ -3,46 +3,46 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scanner</title>
-
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
-body { margin:0; background:#000; color:#fff; font-family:sans-serif; text-align:center; }
+  body { margin:0; background:#000; color:#fff; font-family:sans-serif; text-align:center; }
 
-/* MAIN BUTTONS */
-button.main-btn { 
-  width:90%; max-width:360px; 
-  padding:18px; margin:10px; 
-  font-size:1.3rem; border:none; border-radius:10px; 
-  cursor:pointer; font-weight: bold;
-}
-button:active { opacity: 0.8; }
+  /* BUTTON STYLES */
+  button.main-btn { 
+    width:90%; max-width:360px; 
+    padding:18px; margin:10px auto; 
+    font-size:1.3rem; border:none; border-radius:10px; 
+    cursor:pointer; font-weight: bold; display: block;
+  }
+  button:active { opacity: 0.8; transform: scale(0.98); }
 
-#controls { position:fixed; top:0; width:100%; background:#111; z-index:10; padding:15px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-#scanner { margin-top:280px; display:none; }
-#status { margin-top: 20px; font-size: 1.2rem; color: #aaa; }
+  #controls { 
+    position:fixed; top:0; left:0; width:100%; 
+    background:#111; z-index:10; padding:15px 0; 
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5); 
+  }
 
-/* --- POPUP WINDOW STYLES --- */
-#popup {
-  display: none; /* Hidden by default */
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0,0,0,0.85); /* Dark background overlay */
-  z-index: 100;
-  align-items: center; justify-content: center; flex-direction: column;
-}
-#popup-card {
-  background: #fff; color: #000;
-  width: 85%; max-width: 400px;
-  padding: 30px; border-radius: 15px;
-  text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-#popup-title { font-size: 1.2rem; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;}
-#popup-result { font-size: 2rem; font-weight: bold; margin-bottom: 25px; color: #007bff; line-height: 1.2;}
-#popup-btn {
-  background: #28a745; color: #fff; border: none; padding: 15px 40px;
-  font-size: 1.5rem; border-radius: 50px; cursor: pointer; width: 100%;
-}
+  #scanner { margin-top:300px; display:none; }
+  #status { margin-top: 20px; font-size: 1.2rem; color: #aaa; padding-bottom: 50px; }
+
+  /* POPUP STYLES */
+  #popup {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); z-index: 999;
+    align-items: center; justify-content: center; flex-direction: column;
+  }
+  #popup-card {
+    background: #fff; color: #000; width: 85%; max-width: 400px;
+    padding: 30px; border-radius: 15px; text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #popup-title { font-size: 1.2rem; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;}
+  #popup-result { font-size: 2rem; font-weight: bold; margin-bottom: 25px; color: #007bff; line-height: 1.2;}
+  #popup-btn {
+    background: #28a745; color: #fff; border: none; padding: 15px 40px;
+    font-size: 1.5rem; border-radius: 50px; cursor: pointer; width: 100%;
+  }
 </style>
 </head>
 
@@ -56,88 +56,165 @@ button:active { opacity: 0.8; }
 
 <div id="scanner">
   <div id="reader"></div>
-  <div id="status">Loading products...</div>
+  <div id="status">Loading data...</div>
 </div>
 
 <div id="popup">
   <div id="popup-card">
-    <div id="popup-title">Saved</div>
-    <div id="popup-result">Color Name</div>
-    <button id="popup-btn" onclick="closePopup()">OK</button>
+    <div id="popup-title">Scanned Item</div>
+    <div id="popup-result">...</div>
+    <button id="popup-btn" onclick="closePopup()">OK / Next</button>
   </div>
 </div>
 
 <script>
 // --- CONFIGURATION --- //
-
-const SCRIPT =
-"https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
-
-const INVENTORY =
-"https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
-
-const PRODUCTS_BASE =
-"https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
-
-// Add timestamp to ensure we always get the LATEST data
-const PRODUCTS = PRODUCTS_BASE + "&t=" + Date.now();
-
+const SCRIPT = "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
+const INVENTORY = "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit";
+// Use the Published CSV link
+const PRODUCTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82bgpkiJkrj71ZXODJ7nnlyvSBKmlYJhEoF3JCgfkSy0_Wjjxlw_g-JQIDiDvANZ-p7HXUa/pub?gid=1242803893&single=true&output=csv";
 // --------------------- //
 
 let products = {};
-let locked = false;
 let scanner;
+let audioCtx = null; // Lazy load audio
 
-/* SOUND */
-const ctx = new (window.AudioContext || window.webkitAudioContext)();
+/* SOUND FUNCTION (Safe for Mobile) */
 function beep() {
-  if (ctx.state === "suspended") ctx.resume();
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.frequency.value = 1000;
-  g.gain.value = 1.4;
-  o.connect(g); g.connect(ctx.destination);
-  o.start(); o.stop(ctx.currentTime + 0.15);
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.frequency.value = 1000;
+    g.gain.value = 1.0;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.15);
+  } catch (e) {
+    console.log("Audio error (ignored):", e);
+  }
 }
 
 /* DATA CLEANER */
 function clean(str) {
   if (!str) return "";
-  str = str.trim();
-  if (str.startsWith('"') && str.endsWith('"')) {
-    str = str.slice(1, -1);
-  }
+  str = String(str).trim();
+  if (str.startsWith('"') && str.endsWith('"')) str = str.slice(1, -1);
   return str.trim();
 }
 
 /* LOAD PRODUCTS */
-fetch(PRODUCTS)
-.then(r => r.text())
-.then(t => {
-  const rows = t.split("\n").slice(1);
-  let count = 0;
-  
-  rows.forEach(row => {
-    const cols = row.split(",");
-    if (cols.length > 4) {
-      const barcode = clean(cols[0]);
-      const color   = clean(cols[4]);
-      if (barcode && color) {
-        products[barcode] = color;
-        count++;
+// Add timestamp to prevent caching old data
+fetch(PRODUCTS_URL + "&t=" + Date.now())
+  .then(r => r.text())
+  .then(t => {
+    const rows = t.split("\n").slice(1);
+    let count = 0;
+    rows.forEach(row => {
+      const cols = row.split(",");
+      if (cols.length > 4) {
+        const barcode = clean(cols[0]);
+        const color = clean(cols[4]);
+        if (barcode) {
+          products[barcode] = color;
+          count++;
+        }
       }
-    }
+    });
+    console.log("Loaded products:", count);
+    document.getElementById("status").textContent = `Ready (${count} products loaded)`;
+  })
+  .catch(e => {
+    document.getElementById("status").textContent = "Error loading product list.";
+    console.error(e);
   });
-  console.log(`Loaded ${count} items.`);
-  document.getElementById("status").textContent = `Ready (${count} items loaded)`;
-})
-.catch(e => {
-  document.getElementById("status").textContent = "Error loading product list.";
-});
 
 /* START CAMERA */
 function start() {
-  document.getElementById("scanner").style.display="block";
-  if (scanner) return;
+  document.getElementById("scanner").style.display = "block";
   
-  scanner = new Html5Qrcode("reader
+  // Initialize Audio Context on user click to prevent crash
+  if (!audioCtx) {
+     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } 
+     catch(e) {}
+  }
+
+  if (scanner) return; // Prevent double init
+
+  try {
+    scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 30, qrbox: { width: 250, height: 150 } },
+      onScan
+    ).catch(err => {
+      alert("Camera Error: " + err);
+    });
+  } catch (e) {
+    alert("Scanner library not loaded. Check internet.");
+  }
+}
+
+/* SCAN HANDLER */
+function onScan(code) {
+  // Pause scanning immediately
+  if (scanner) scanner.pause();
+
+  code = clean(code);
+  
+  // 1. Exact Match
+  let color = products[code];
+  // 2. Try adding Zero
+  if (!color) color = products["0" + code];
+  // 3. Try removing Zero
+  if (!color && code.startsWith("0")) color = products[code.substring(1)];
+
+  const displayColor = color || "UNKNOWN";
+  
+  // Play Beep
+  beep();
+
+  // Show Popup
+  showPopup(displayColor);
+
+  // Save to Google Sheets
+  fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`, { mode: "no-cors" });
+}
+
+/* POPUP LOGIC */
+function showPopup(colorName) {
+  const popup = document.getElementById("popup");
+  const resultText = document.getElementById("popup-result");
+  const btn = document.getElementById("popup-btn");
+
+  popup.style.display = "flex";
+  resultText.textContent = colorName;
+
+  if (colorName === "UNKNOWN") {
+    resultText.style.color = "#dc3545"; // Red
+    btn.style.background = "#6c757d";
+  } else {
+    resultText.style.color = "#007bff"; // Blue
+    btn.style.background = "#28a745";
+  }
+}
+
+function closePopup() {
+  document.getElementById("popup").style.display = "none";
+  // Resume scanning
+  if (scanner) scanner.resume();
+}
+
+/* BUTTONS */
+function clearInventory() {
+  if (confirm("Delete all inventory data?")) {
+    fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
+  }
+}
+function openInventory() {
+  window.open(INVENTORY, "_blank");
+}
+</script>
+</body>
+</html>
