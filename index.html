@@ -27,7 +27,6 @@ button {
   font-size:1.1rem;
   border:none;
   border-radius:8px;
-  cursor:pointer;
 }
 
 #start-btn { background:#007bff; color:#fff; }
@@ -98,10 +97,10 @@ function parseCSV(text) {
   const rows = [];
   let row=[], val="", q=false;
   for (let c of text) {
-    if (c === '"') q = !q;
+    if (c === '"') q=!q;
     else if (c === ',' && !q) { row.push(val); val=""; }
     else if (c === '\n' && !q) { row.push(val); rows.push(row); row=[]; val=""; }
-    else val += c;
+    else val+=c;
   }
   if (val) row.push(val);
   return rows;
@@ -115,9 +114,11 @@ fetch(PRODUCTS_CSV_URL)
 .then(csv => {
   const rows = parseCSV(csv);
   rows.slice(1).forEach(r => {
-    const barcode = r[0]?.trim();
-    const color   = r[4]?.trim(); // ✅ CORRECT: Column E
-    if (barcode && color) products[barcode] = color;
+    const barcode = String(r[0]).trim(); // 🔒 STRING
+    const color   = String(r[4]).trim(); // Color
+    if (barcode && color) {
+      products[barcode] = color;
+    }
   });
   document.getElementById("status").textContent = "Ready...";
 });
@@ -142,6 +143,8 @@ function onScanSuccess(code) {
   lastTime = now;
 
   loudBeep();
+
+  code = String(code).trim(); // 🔒 STRING
 
   const color = products[code] || "UNKNOWN";
 
