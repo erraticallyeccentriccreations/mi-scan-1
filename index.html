@@ -87,4 +87,125 @@ const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbySceeS-1b8bQ-RQXICYU-flzVlvCwSSBLXI-7Tyq1ct60QN1AcnvXqEPaig4xWo6cC/exec";
 
 const INVENTORY_URL =
-  "https://docs.google.com/spreadsheets/d/1JGg
+  "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/edit#gid=0";
+
+const PRODUCTS_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/1JGgkmJw-ZomVjKmLauKJ8V070_Vhx-97WvdhHLCJrmc/export?format=csv&gid=1242803893";
+
+/* =============================
+   VERY LOUD BEEP
+============================= */
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function loudBeep() {
+    if (audioCtx.state === "suspended") audioCtx.resume();
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+    gain.gain.setValueAtTime(1.2, audioCtx.currentTime); // VERY LOUD
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.12);
+}
+
+/* =============================
+   PRODUCT CACHE
+============================= */
+
+const productMap = {}; // barcode -> color
+
+fetch(PRODUCTS_CSV_URL)
+    .then(r => r.text())
+    .then(csv => {
+        const lines = csv.split("\n").slice(1);
+        lines.forEach(line => {
+            const cols = line.split(",");
+            const barcode = cols[0]?.trim();
+            const color = cols[4]?.trim(); // Column E = Color
+            if (barcode && color) {
+                productMap[barcode] = color;
+            }
+        });
+        document.getElementById("status").textContent = "Ready...";
+    })
+    .catch(() => {
+        document.getElementById("status").textContent = "Product load failed";
+    });
+
+/* =============================
+   SCANNER
+============================= */
+
+let lastCode = null;
+let lastTime = 0;
+let scanner;
+
+function startScanner() {
+    document.getElementById("start-btn").style.display = "none";
+    document.getElementById("clear-btn").style.display = "none";
+    document.getElementById("view-btn").style.display = "none";
+    document.getElementById("scanner-container").style.display = "block";
+
+    scanner = new Html5QrcodeScanner("reader", {
+        fps: 30,
+        qrbox: { width: 250, height: 100 },
+        formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.CODE_39
+        ],
+        videoConstraints: { facingMode: "environment" }
+    });
+
+    scanner.render(onScanSuccess, () => {});
+}
+
+function onScanSuccess(code) {
+    const now = Date.now();
+    if (code === lastCode && now - lastTime < 1000) return;
+
+    lastCode = code;
+    lastTime = now;
+
+    loudBeep();
+
+    fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(code)}`, {
+        mode: "no-cors"
+    });
+
+    const color = productMap[code] || "Unknown";
+    const status = document.getElementById("status");
+    status.textContent = "SAVED: " + color;
+    status.className = "success";
+
+    setTimeout(() => {
+        status.textContent = "Ready...";
+        status.className = "idle";
+    }, 1200);
+}
+
+/* =============================
+   BUTTONS
+============================= */
+
+function clearInventory() {
+    if (!confirm("Clear entire inventory?")) return;
+    fetch(`${SCRIPT_URL}?action=clear`, { mode: "no-cors" });
+    alert("Inventory cleared");
+}
+
+function viewInventory() {
+    window.open(INVENTORY_URL, "_blank");
+}
+</script>
+
+</body>
+</html>
