@@ -11,6 +11,7 @@
     text-align: center; padding-bottom: 220px; 
   }
 
+  /* BUTTON STYLES */
   #controls { 
     position: fixed; bottom: 0; left: 0; width: 100%; 
     background: #000; z-index: 1000; padding: 10px 0; 
@@ -28,9 +29,11 @@
   
   button:active { opacity: 0.8; transform: scale(0.98); }
 
+  /* SCANNER POSITION */
   #scanner { width: 100%; margin-top: 0; display: none; position: relative; z-index: 1; }
   #status { margin-top: 10px; font-size: 1.1rem; color: #aaa; z-index: 5; }
 
+  /* NOTIFICATIONS */
   #notification {
     position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
     width: 90%; font-size: 2rem; font-weight: bold; text-align: center;
@@ -41,7 +44,7 @@
   
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
-  .info-text    { color: #007bff; font-size: 1.5rem; }
+  .info-text    { color: #007bff; font-size: 1.5rem; } 
 
 </style>
 </head>
@@ -77,8 +80,9 @@ let audioCtx = null;
 let isFlashOn = false; 
 let isScanning = false;
 let cameras = [];      
-let currentCamIndex = 0; // STRICTLY 0
+let currentCamIndex = 0;
 
+/* SOUND */
 function beep() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -92,6 +96,7 @@ function beep() {
   } catch (e) { console.log("Audio silent"); }
 }
 
+/* CLEANER */
 function clean(str) {
   if (!str) return "";
   str = String(str).trim();
@@ -99,6 +104,7 @@ function clean(str) {
   return str.trim();
 }
 
+/* LOAD DATA */
 fetch(PRODUCTS_URL + "&t=" + Date.now())
   .then(r => r.text())
   .then(t => {
@@ -122,11 +128,23 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     document.getElementById("status").textContent = `Ready (${count} products)`;
   });
 
-/* SETUP CAMERAS (FORCE 0) */
+/* SETUP CAMERAS (SEARCH FOR BACK) */
 Html5Qrcode.getCameras().then(devices => {
   if (devices && devices.length) {
     cameras = devices;
-    currentCamIndex = 0; // Always start with the first one
+    
+    // Default to the last camera (often back on Android if list is inverted)
+    currentCamIndex = cameras.length - 1;
+
+    // Try to find one explicitly labeled "back" or "environment"
+    for (let i = 0; i < cameras.length; i++) {
+        let label = cameras[i].label.toLowerCase();
+        if (label.includes("back") || label.includes("environment")) {
+            currentCamIndex = i;
+            break; // Found it, stop looking
+        }
+    }
+    console.log("Selected Default Cam Index:", currentCamIndex);
   }
 }).catch(err => console.log("Cam error", err));
 
@@ -142,7 +160,6 @@ function startScanner() {
   document.getElementById("scanner").style.display = "block";
   if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
   
-  // Use the ID of the current index
   let camId = null;
   if (cameras.length > 0) {
     camId = cameras[currentCamIndex].id;
@@ -157,14 +174,20 @@ function startScanner() {
   isFlashOn = false;
   updateFlashBtn();
 
-  // Explicitly use the ID if we have it
+  // If we have an ID, use it.
   const startPromise = camId ? scanner.start(camId, config, onScan) : scanner.start({ facingMode: "environment" }, config, onScan);
 
   startPromise.then(() => {
     isScanning = true;
     const btn = document.getElementById("btn-scan-toggle");
     btn.innerHTML = "⏹ Stop Camera";
-    btn.style.background = "#dc3545"; 
+    btn.style.background = "#dc3545"; // Red
+    
+    // Show user which camera started
+    if(cameras.length > 0) {
+        let label = cameras[currentCamIndex].label;
+        showNotification("Started: " + label.split('(')[0], "info-text");
+    }
   }).catch(err => {
     console.error(err);
     alert("Camera failed to start. Refresh page.");
@@ -178,7 +201,7 @@ function stopScanner() {
       isScanning = false;
       const btn = document.getElementById("btn-scan-toggle");
       btn.innerHTML = "▶ Start Scanning";
-      btn.style.background = "#28a745"; 
+      btn.style.background = "#28a745"; // Green
       document.getElementById("scanner").style.display = "none";
       isFlashOn = false;
       updateFlashBtn();
