@@ -129,11 +129,13 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
 Html5Qrcode.getCameras().then(devices => {
   cameras = devices;
   
-  // LOGIC: Start with Camera 1 (The second one) if available
-  if (cameras.length > 1) {
-    currentCamIndex = 1; // Skips the first camera (Index 0)
+  // LOGIC: Try Camera 2 (Third one) first
+  if (cameras.length > 2) {
+    currentCamIndex = 2; // Try the 3rd camera
+  } else if (cameras.length > 1) {
+    currentCamIndex = 1; // Fallback to 2nd
   } else {
-    currentCamIndex = 0; // Fallback if only 1 camera exists
+    currentCamIndex = 0; // Fallback to 1st
   }
   
 }).catch(err => console.log("Cam error", err));
@@ -202,8 +204,10 @@ function switchCamera() {
     return;
   }
   
+  // Just go to next number. Simple.
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
   
+  // RESTART with new index
   if (isScanning) {
     scanner.stop().then(() => {
        scanner.clear();
@@ -211,6 +215,7 @@ function switchCamera() {
        setTimeout(() => { startScanner(); }, 200);
     }).catch(err => { startScanner(); });
   } else {
+     // Just show notification if not scanning
      let label = cameras[currentCamIndex].label || `Cam ${currentCamIndex}`;
      showNotification("Selected: " + label.split('(')[0], "info-text");
   }
