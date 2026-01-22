@@ -12,7 +12,6 @@
     color: #fff; 
     font-family: sans-serif; 
     text-align: center;
-    /* Space for bottom buttons */
     padding-bottom: 250px; 
   }
 
@@ -77,9 +76,9 @@
     text-shadow: 0px 3px 8px rgba(0,0,0,1);
   }
   
-  /* Text Colors */
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
+  .info-text    { color: #ffc107; font-size: 1.5rem; } /* Smaller yellow text for errors */
 
 </style>
 </head>
@@ -94,7 +93,7 @@
 </div>
 
 <div id="controls">
-  <button class="main-btn" id="flash-btn" onclick="forceFlash()" style="background:#555; color:#fff;">🔦 Light: OFF</button>
+  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light: OFF</button>
   
   <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
@@ -171,41 +170,47 @@ function start() {
   } catch (err) { alert("Scanner library failed."); }
 }
 
-/* HARDWARE FLASH OVERRIDE */
-function forceFlash() {
-  // 1. Check if we are scanning
-  const videoElement = document.querySelector("#scanner video");
-  if (!videoElement || !videoElement.srcObject) {
-    alert("Camera not active. Press 'Start Scanning' first.");
+/* SMART FLASHLIGHT TOGGLE */
+function toggleFlash() {
+  // 1. Basic Check: Is scanner running?
+  const video = document.querySelector("#scanner video");
+  if (!video || !video.srcObject) {
+    showNotification("Start Camera First", "info-text");
     return;
   }
 
-  isFlashOn = !isFlashOn;
-  
-  // 2. Grab the native video track directly (Bypassing Library)
-  const track = videoElement.srcObject.getVideoTracks()[0];
-  
-  if (track) {
-    // 3. Apply the 'torch' constraint directly to hardware
-    track.applyConstraints({
-      advanced: [{ torch: isFlashOn }]
-    })
-    .then(() => {
-        updateFlashBtn(true);
-    })
-    .catch(err => {
-        // Fallback: Try the library method if direct access fails
-        if (scanner) {
-            scanner.applyVideoConstraints({ advanced: [{ torch: isFlashOn }] })
-            .then(() => updateFlashBtn(true))
-            .catch(e => {
-                isFlashOn = !isFlashOn; // Reset flag
-                updateFlashBtn(false);
-                alert("Flashlight blocked by this phone/browser.");
-            });
-        }
-    });
+  // 2. Get the active video track (The hardware link)
+  const track = video.srcObject.getVideoTracks()[0];
+  if (!track) {
+    showNotification("No Camera Track", "info-text");
+    return;
   }
+
+  // 3. CAPABILITY CHECK (The Fix for Android/iOS)
+  // Ask the camera: "Do you support torch?"
+  const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+  if (!capabilities.torch) {
+    // If the phone says "No torch", we tell the user clearly
+    showNotification("No Light on this Camera", "info-text");
+    return;
+  }
+
+  // 4. Toggle State
+  isFlashOn = !isFlashOn;
+
+  // 5. Apply the Constraint
+  track.applyConstraints({
+    advanced: [{ torch: isFlashOn }]
+  })
+  .then(() => {
+    updateFlashBtn(true);
+  })
+  .catch(err => {
+    // If it fails (ConstraintNotSatisfied), revert state
+    console.log("Flash Error:", err);
+    isFlashOn = !isFlashOn;
+    showNotification("Light Blocked", "error-text");
+  });
 }
 
 function updateFlashBtn(success) {
@@ -233,19 +238,19 @@ function onScan(code) {
 
   const displayColor = color || "UNKNOWN";
   beep();
-  showNotification(displayColor);
+  showNotification(displayColor, displayColor === "UNKNOWN" ? "error-text" : "success-text");
 
   fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`, { mode: "no-cors" });
   setTimeout(() => { locked = false; }, 1500);
 }
 
-/* NOTIFICATION */
+/* NOTIFICATION HELPER */
 let toastTimeout;
-function showNotification(msg) {
+function showNotification(msg, cssClass) {
   const el = document.getElementById("notification");
   el.textContent = msg;
   el.style.opacity = "1";
-  el.className = (msg === "UNKNOWN") ? "error-text" : "success-text";
+  el.className = cssClass || "success-text"; // Default to success if not specified
   clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => { el.style.opacity = "0"; }, 2000);
 }
@@ -254,7 +259,7 @@ function showNotification(msg) {
 function clearInventory() {
   if (confirm("Clear inventory?")) {
     fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
-    showNotification("Inventory Cleared");
+    showNotification("Inventory Cleared", "success-text");
   }
 }
 function openInventory() { window.open(INVENTORY, "_blank"); }
