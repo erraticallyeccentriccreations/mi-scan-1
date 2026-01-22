@@ -11,22 +11,45 @@
 body { background:#000; color:#fff; font-family:sans-serif; margin:0; text-align:center; }
 
 #controls {
-  position:fixed; top:0; width:100%; background:#000; z-index:9999; padding:10px;
+  position:fixed;
+  top:0;
+  width:100%;
+  background:#000;
+  z-index:9999;
+  padding:10px;
 }
 
 button {
-  width:90%; max-width:340px; padding:16px; margin:6px auto;
-  font-size:1.1rem; border:none; border-radius:8px; cursor:pointer;
+  width:90%;
+  max-width:340px;
+  padding:16px;
+  margin:6px auto;
+  font-size:1.1rem;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
 }
 
 #start-btn { background:#007bff; color:#fff; }
 #clear-btn { background:#dc3545; color:#fff; }
 #view-btn  { background:#28a745; color:#fff; }
 
-#scanner-container { margin-top:220px; }
-#reader { border:2px solid #333; min-height:260px; }
+#scanner-container {
+  margin-top:220px;
+  display:none;
+}
 
-#status { margin-top:15px; font-size:1.4rem; min-height:40px; }
+#reader {
+  border:2px solid #333;
+  min-height:260px;
+}
+
+#status {
+  margin-top:15px;
+  font-size:1.4rem;
+  min-height:40px;
+}
+
 .success { color:#00ff00; }
 .idle { color:#888; }
 </style>
@@ -35,12 +58,12 @@ button {
 <body>
 
 <div id="controls">
-  <button id="start-btn" onclick="startScanner()">⚡ Start Scanner</button>
-  <button id="clear-btn" onclick="clearInventory()">🧹 Clear Inventory</button>
-  <button id="view-btn" onclick="viewInventory()">📋 View Inventory</button>
+  <button onclick="startScanner()">⚡ Start Scanner</button>
+  <button onclick="clearInventory()">🧹 Clear Inventory</button>
+  <button onclick="viewInventory()">📋 View Inventory</button>
 </div>
 
-<div id="scanner-container" style="display:none;">
+<div id="scanner-container">
   <div id="reader"></div>
   <div id="status" class="idle">Loading products…</div>
 </div>
@@ -61,82 +84,90 @@ function loudBeep() {
   if (audioCtx.state === "suspended") audioCtx.resume();
   const o = audioCtx.createOscillator();
   const g = audioCtx.createGain();
-  o.type = "sawtooth"; o.frequency.value = 900; g.gain.value = 1.3;
-  o.connect(g); g.connect(audioCtx.destination);
-  o.start(); o.stop(audioCtx.currentTime + 0.12);
+  o.type = "sawtooth";
+  o.frequency.value = 900;
+  g.gain.value = 1.3;
+  o.connect(g);
+  g.connect(audioCtx.destination);
+  o.start();
+  o.stop(audioCtx.currentTime + 0.12);
 }
 
-/* ✅ SAFE CSV PARSER */
+/* SAFE CSV PARSER */
 function parseCSV(text) {
   const rows = [];
-  let row = [], val = "", inQuotes = false;
+  let row=[], val="", q=false;
   for (let c of text) {
-    if (c === '"') inQuotes = !inQuotes;
-    else if (c === ',' && !inQuotes) { row.push(val); val = ""; }
-    else if (c === '\n' && !inQuotes) { row.push(val); rows.push(row); row=[]; val=""; }
+    if (c === '"') q = !q;
+    else if (c === ',' && !q) { row.push(val); val=""; }
+    else if (c === '\n' && !q) { row.push(val); rows.push(row); row=[]; val=""; }
     else val += c;
   }
   if (val) row.push(val);
   return rows;
 }
 
-/* PRODUCT CACHE */
-const productMap = {};
+/* PRODUCT LOOKUP */
+const products = {};
+
 fetch(PRODUCTS_CSV_URL)
 .then(r => r.text())
 .then(csv => {
   const rows = parseCSV(csv);
   rows.slice(1).forEach(r => {
     const barcode = r[0]?.trim();
-    const color   = r[4]?.trim(); // Column E
-    if (barcode && color) productMap[barcode] = color;
+    const color   = r[4]?.trim(); // ✅ CORRECT: Column E
+    if (barcode && color) products[barcode] = color;
   });
   document.getElementById("status").textContent = "Ready...";
 });
 
-let lastCode = null, lastTime = 0, scanner;
+/* SCANNER */
+let lastCode=null, lastTime=0, scanner;
 
 function startScanner() {
-  document.getElementById("scanner-container").style.display = "block";
+  document.getElementById("scanner-container").style.display="block";
   scanner = new Html5QrcodeScanner("reader", {
     fps:30,
     qrbox:{width:250,height:100},
-    formatsToSupport:[
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.CODE_39
-    ],
     videoConstraints:{facingMode:"environment"}
   });
-  scanner.render(onScanSuccess,()=>{});
+  scanner.render(onScanSuccess, ()=>{});
 }
 
 function onScanSuccess(code) {
   const now = Date.now();
   if (code === lastCode && now - lastTime < 1000) return;
-  lastCode = code; lastTime = now;
+  lastCode = code;
+  lastTime = now;
 
   loudBeep();
 
-  const color = productMap[code] || "UNKNOWN";
+  const color = products[code] || "UNKNOWN";
 
-  fetch(`${SCRIPT_URL}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(color)}`,
-    { mode:"no-cors" });
+  fetch(
+    `${SCRIPT_URL}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(color)}`,
+    { mode:"no-cors" }
+  );
 
   const s = document.getElementById("status");
   s.textContent = `SAVED: ${color}`;
   s.className = "success";
-  setTimeout(()=>{ s.textContent="Ready..."; s.className="idle"; },1200);
+
+  setTimeout(() => {
+    s.textContent = "Ready...";
+    s.className = "idle";
+  }, 1200);
 }
 
+/* BUTTONS */
 function clearInventory() {
-  if(confirm("Clear inventory?"))
-    fetch(`${SCRIPT_URL}?action=clear`,{mode:"no-cors"});
+  if (confirm("Clear inventory?"))
+    fetch(`${SCRIPT_URL}?action=clear`, { mode:"no-cors" });
 }
 
 function viewInventory() {
-  window.open(INVENTORY_URL,"_blank");
+  window.open(INVENTORY_URL, "_blank");
 }
 </script>
 </body>
