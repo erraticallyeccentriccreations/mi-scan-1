@@ -236,4 +236,28 @@ function onScan(code) {
   showNotification(displayColor);
 
   fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`, { mode: "no-cors" });
-  setTimeout(() =>
+  setTimeout(() => { locked = false; }, 1500);
+}
+
+/* NOTIFICATION */
+let toastTimeout;
+function showNotification(msg) {
+  const el = document.getElementById("notification");
+  el.textContent = msg;
+  el.style.opacity = "1";
+  el.className = (msg === "UNKNOWN") ? "error-text" : "success-text";
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { el.style.opacity = "0"; }, 2000);
+}
+
+/* BUTTONS */
+function clearInventory() {
+  if (confirm("Clear inventory?")) {
+    fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
+    showNotification("Inventory Cleared");
+  }
+}
+function openInventory() { window.open(INVENTORY, "_blank"); }
+</script>
+</body>
+</html>
