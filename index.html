@@ -44,7 +44,7 @@
   
   .success-text { color: #00ff00; } 
   .error-text   { color: #ff3333; } 
-  .info-text    { color: #007bff; font-size: 1.5rem; } 
+  .info-text    { color: #007bff; font-size: 1.5rem; }
 
 </style>
 </head>
@@ -82,7 +82,7 @@ let audioCtx = null;
 let isFlashOn = false; 
 let isScanning = false;
 let cameras = [];      
-let currentCamIndex = 0; // STRICTLY 0
+let currentCamIndex = 0;
 
 /* SOUND */
 function beep() {
@@ -130,18 +130,33 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
     document.getElementById("status").textContent = `Ready (${count} products)`;
   });
 
-/* SETUP CAMERAS (NO SORTING) */
+/* SETUP CAMERAS (FIND "0" or "BACK") */
 Html5Qrcode.getCameras().then(devices => {
   if (devices && devices.length) {
     cameras = devices;
-    currentCamIndex = 0; // Force first camera
+    
+    // Default to 0
+    let bestIndex = 0;
+    
+    // 1. Look for label containing "0" (User Request)
+    const indexZero = cameras.findIndex(c => c.label.includes("0"));
+    if (indexZero !== -1) {
+      bestIndex = indexZero;
+    } 
+    // 2. If not found, look for "back"
+    else {
+      const indexBack = cameras.findIndex(c => c.label.toLowerCase().includes("back"));
+      if (indexBack !== -1) {
+        bestIndex = indexBack;
+      }
+    }
+
+    currentCamIndex = bestIndex;
+    console.log("Defaulting to camera index:", currentCamIndex, cameras[currentCamIndex].label);
   }
 }).catch(err => console.log("Cam error", err));
 
-/* TOGGLE SCAN (START / STOP) */
 function toggleScan() {
-  const btn = document.getElementById("btn-scan-toggle");
-  
   if (isScanning) {
     stopScanner(); 
   } else {
@@ -149,7 +164,6 @@ function toggleScan() {
   }
 }
 
-/* START LOGIC */
 function startScanner() {
   document.getElementById("scanner").style.display = "block";
   if (!audioCtx) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} 
@@ -182,7 +196,6 @@ function startScanner() {
   });
 }
 
-/* STOP LOGIC */
 function stopScanner() {
   if (scanner && isScanning) {
     scanner.stop().then(() => {
@@ -198,22 +211,18 @@ function stopScanner() {
   }
 }
 
-/* SWITCH CAMERA */
 function switchCamera() {
   if (cameras.length < 2) {
     showNotification("Only 1 Cam Found", "error-text");
     return;
   }
   
-  // Cycle Index
   currentCamIndex = (currentCamIndex + 1) % cameras.length;
   
-  // Show Name
   let camLabel = cameras[currentCamIndex].label || ("Camera " + (currentCamIndex + 1));
   camLabel = camLabel.split('(')[0].trim(); 
   showNotification(camLabel, "info-text");
 
-  // Restart if running
   if (isScanning) {
     scanner.stop().then(() => {
        scanner.clear();
@@ -223,7 +232,6 @@ function switchCamera() {
   }
 }
 
-/* FLASHLIGHT */
 function toggleFlash() {
   const video = document.querySelector("#scanner video");
   if (!video || !video.srcObject) return;
@@ -256,7 +264,6 @@ function updateFlashBtn() {
     }
 }
 
-/* SCAN HANDLER */
 function onScan(code) {
   if (locked) return;
   locked = true;
@@ -274,6 +281,7 @@ function onScan(code) {
   beep();
   showNotification(color, color === "UNKNOWN" ? "error-text" : "success-text");
 
+  // Send Data
   const url = `${SCRIPT}?barcode=${encodeURIComponent(code)}` +
               `&color=${encodeURIComponent(color)}` +
               `&brand=${encodeURIComponent(brand)}` +
@@ -305,4 +313,3 @@ let toastTimeout;
 </script>
 </body>
 </html>
-
