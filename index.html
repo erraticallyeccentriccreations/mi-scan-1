@@ -22,32 +22,32 @@
     background:#000; z-index:10; padding:10px 0; 
   }
 
-  /* Reverted Scanner Position */
+  /* Scanner Position */
   #scanner { margin-top:240px; display:none; }
   
   #status { margin-top: 15px; font-size: 1.2rem; color: #aaa; }
 
-  /* FLOATING NOTIFICATION (Toast) */
+  /* FLOATING TEXT (No Background) */
   #notification {
     position: fixed;
-    top: 150px; /* Sits between buttons and scanner */
+    top: 180px; /* Positioned above scanner */
     left: 50%;
     transform: translateX(-50%);
-    width: 90%;
-    max-width: 400px;
-    padding: 15px;
-    border-radius: 12px;
-    font-size: 1.5rem;
+    width: 100%;
+    font-size: 2.5rem; /* Big Text */
     font-weight: bold;
     text-align: center;
-    color: white;
     opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-    pointer-events: none; /* Allows clicking through it */
+    transition: opacity 0.2s ease-in-out;
+    pointer-events: none;
     z-index: 100;
+    text-shadow: 0px 2px 5px rgba(0,0,0,1); /* Shadow for contrast */
   }
-  .success-toast { background: rgba(40, 167, 69, 0.9); box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4); }
-  .error-toast { background: rgba(220, 53, 69, 0.9); box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4); }
+  
+  /* Text Colors */
+  .success-text { color: #00ff00; } /* Bright Green */
+  .error-text   { color: #ff3333; } /* Red (for unknown) */
+
 </style>
 </head>
 
@@ -59,7 +59,7 @@
   <button class="main-btn" onclick="openInventory()" style="background:#007bff; color:#fff;">📋 View Inventory</button>
 </div>
 
-<div id="notification">Ready</div>
+<div id="notification"></div>
 
 <div id="scanner">
   <div id="reader"></div>
@@ -76,9 +76,9 @@ const PRODUCTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRWWQ0TK82
 let products = {};
 let scanner;
 let locked = false;
-let audioCtx = null; // Lazy load audio
+let audioCtx = null;
 
-/* SOUND FUNCTION (Safe for Mobile) */
+/* SOUND FUNCTION */
 function beep() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -129,15 +129,13 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
 function start() {
   document.getElementById("scanner").style.display = "block";
   
-  // Init Audio on click
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
-
   if (scanner) return; 
 
   scanner = new Html5Qrcode("reader");
   scanner.start(
     { facingMode: "environment" },
-    { fps: 30, qrbox: { width: 250, height: 100 } }, // Reverted to 100 height
+    { fps: 30, qrbox: { width: 250, height: 100 } },
     onScan
   ).catch(err => alert("Camera Error: " + err));
 }
@@ -149,11 +147,8 @@ function onScan(code) {
 
   code = clean(code);
   
-  // 1. Exact Match
   let color = products[code];
-  // 2. Try adding Zero
   if (!color) color = products["0" + code];
-  // 3. Try removing Zero
   if (!color && code.startsWith("0")) color = products[code.substring(1)];
 
   const displayColor = color || "UNKNOWN";
@@ -161,10 +156,8 @@ function onScan(code) {
   beep();
   showNotification(displayColor);
 
-  // Send to Google Sheets
   fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`, { mode: "no-cors" });
 
-  // Wait 1.5 seconds before allowing next scan
   setTimeout(() => { locked = false; }, 1500);
 }
 
@@ -176,10 +169,9 @@ function showNotification(msg) {
   el.textContent = msg;
   el.style.opacity = "1";
   
-  // Style based on success/fail
-  el.className = (msg === "UNKNOWN") ? "error-toast" : "success-toast";
+  // Green text for success, Red for unknown
+  el.className = (msg === "UNKNOWN") ? "error-text" : "success-text";
 
-  // Hide after 2 seconds
   clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => {
     el.style.opacity = "0";
