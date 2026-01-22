@@ -12,7 +12,8 @@
     color: #fff; 
     font-family: sans-serif; 
     text-align: center;
-    padding-bottom: 250px; /* Space for buttons */
+    /* Space for bottom buttons */
+    padding-bottom: 250px; 
   }
 
   /* BUTTON STYLES (Fixed to Bottom) */
@@ -93,7 +94,7 @@
 </div>
 
 <div id="controls">
-  <button class="main-btn" id="flash-btn" onclick="toggleFlash()" style="background:#555; color:#fff;">🔦 Light: OFF</button>
+  <button class="main-btn" id="flash-btn" onclick="forceFlash()" style="background:#555; color:#fff;">🔦 Light: OFF</button>
   
   <button class="main-btn" onclick="start()" style="background:#28a745; color:#fff;">▶ Start Scanning</button>
   <button class="main-btn" onclick="clearInventory()" style="background:#dc3545; color:#fff;">🧹 Clear Inventory</button>
@@ -118,7 +119,6 @@ function beep() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
-    
     const o = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     o.frequency.value = 1000;
@@ -138,10 +138,7 @@ function clean(str) {
 
 /* LOAD PRODUCTS */
 fetch(PRODUCTS_URL + "&t=" + Date.now())
-  .then(r => {
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.text();
-  })
+  .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
   .then(t => {
     const rows = t.split("\n").slice(1);
     let count = 0;
@@ -150,23 +147,17 @@ fetch(PRODUCTS_URL + "&t=" + Date.now())
       if (cols.length > 4) {
         const barcode = clean(cols[0]);
         const color = clean(cols[4]);
-        if (barcode) {
-          products[barcode] = color;
-          count++;
-        }
+        if (barcode) { products[barcode] = color; count++; }
       }
     });
-    console.log("Loaded products:", count);
-    document.getElementById("status").textContent = `Ready (${count} products loaded)`;
+    console.log("Loaded:", count);
+    document.getElementById("status").textContent = `Ready (${count} products)`;
   })
-  .catch(e => {
-    document.getElementById("status").textContent = "Error loading product list.";
-  });
+  .catch(e => { document.getElementById("status").textContent = "Error loading list."; });
 
 /* START CAMERA */
 function start() {
   document.getElementById("scanner").style.display = "block";
-  
   if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
   if (scanner) return; 
 
@@ -177,25 +168,47 @@ function start() {
       { fps: 30, qrbox: { width: 250, height: 100 } },
       onScan
     ).catch(err => alert("Camera Error: " + err));
-  } catch (err) {
-    alert("Scanner library failed to load.");
+  } catch (err) { alert("Scanner library failed."); }
+}
+
+/* HARDWARE FLASH OVERRIDE */
+function forceFlash() {
+  // 1. Check if we are scanning
+  const videoElement = document.querySelector("#scanner video");
+  if (!videoElement || !videoElement.srcObject) {
+    alert("Camera not active. Press 'Start Scanning' first.");
+    return;
+  }
+
+  isFlashOn = !isFlashOn;
+  
+  // 2. Grab the native video track directly (Bypassing Library)
+  const track = videoElement.srcObject.getVideoTracks()[0];
+  
+  if (track) {
+    // 3. Apply the 'torch' constraint directly to hardware
+    track.applyConstraints({
+      advanced: [{ torch: isFlashOn }]
+    })
+    .then(() => {
+        updateFlashBtn(true);
+    })
+    .catch(err => {
+        // Fallback: Try the library method if direct access fails
+        if (scanner) {
+            scanner.applyVideoConstraints({ advanced: [{ torch: isFlashOn }] })
+            .then(() => updateFlashBtn(true))
+            .catch(e => {
+                isFlashOn = !isFlashOn; // Reset flag
+                updateFlashBtn(false);
+                alert("Flashlight blocked by this phone/browser.");
+            });
+        }
+    });
   }
 }
 
-/* FLASHLIGHT TOGGLE (FORCED) */
-function toggleFlash() {
-  if (!scanner) {
-    alert("Please Start Scanning first.");
-    return;
-  }
-  
-  isFlashOn = !isFlashOn;
-  
-  // Attempt to force the torch constraint
-  scanner.applyVideoConstraints({
-    advanced: [{ torch: isFlashOn }]
-  })
-  .then(() => {
+function updateFlashBtn(success) {
     const btn = document.getElementById("flash-btn");
     if (isFlashOn) {
       btn.innerHTML = "🔦 Light: ON";
@@ -206,20 +219,12 @@ function toggleFlash() {
       btn.style.background = "#555"; // Gray
       btn.style.color = "#fff";
     }
-  })
-  .catch(err => {
-    // Even if it fails, we leave the button alone, but show a small error toast
-    console.log(err);
-    isFlashOn = !isFlashOn; // Revert state
-    showNotification("Light Failed");
-  });
 }
 
 /* SCAN HANDLER */
 function onScan(code) {
   if (locked) return;
   locked = true;
-
   code = clean(code);
   
   let color = products[code];
@@ -227,39 +232,8 @@ function onScan(code) {
   if (!color && code.startsWith("0")) color = products[code.substring(1)];
 
   const displayColor = color || "UNKNOWN";
-  
   beep();
   showNotification(displayColor);
 
   fetch(`${SCRIPT}?barcode=${encodeURIComponent(code)}&color=${encodeURIComponent(displayColor)}`, { mode: "no-cors" });
-
-  setTimeout(() => { locked = false; }, 1500);
-}
-
-/* NOTIFICATION LOGIC */
-let toastTimeout;
-function showNotification(msg) {
-  const el = document.getElementById("notification");
-  el.textContent = msg;
-  el.style.opacity = "1";
-  el.className = (msg === "UNKNOWN") ? "error-text" : "success-text";
-
-  clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => {
-    el.style.opacity = "0";
-  }, 2000);
-}
-
-/* BUTTONS */
-function clearInventory() {
-  if (confirm("Delete all inventory data?")) {
-    fetch(`${SCRIPT}?action=clear`, { mode: "no-cors" });
-    showNotification("Inventory Cleared");
-  }
-}
-function openInventory() {
-  window.open(INVENTORY, "_blank");
-}
-</script>
-</body>
-</html>
+  setTimeout(() =>
